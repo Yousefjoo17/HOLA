@@ -148,3 +148,14 @@ transaction_counts = transaction_df["PRODUCT_NAME"].value_counts()
 transaction_df["PRODUCT_NAME"] = transaction_df["PRODUCT_NAME"].map(
     lambda x: x if transaction_counts.get(x, 0) >= threshold else "another product"
 )
+
+
+
+# Create a binary matrix of Customer (RIMNO) vs. Product Holding
+user_item_matrix = pd.crosstab(prime_df['RIMNO'], prime_df['PRODUCT_NAME'])
+
+# Prefix the columns so they don't get confused with future features
+user_item_matrix.columns = [f"HAS_PROD_{col.strip().replace(' ', '_')}" for col in user_item_matrix.columns]
+
+# Merge back to prime_df (dropping duplicates if a RIMNO has multiple rows in prime_df)
+prime_df = prime_df.drop_duplicates(subset=['RIMNO']).merge(user_item_matrix, on='RIMNO', how='left')
