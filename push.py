@@ -132,3 +132,19 @@ with open("category_frequencies.txt", "w", encoding="utf-8") as file:
         file.write(prime_df[col].value_counts(dropna=False).to_string() + "\n")
 
 print("Frequencies successfully exported to 'category_frequencies.txt'")
+
+
+
+threshold = 1000
+
+# Prime
+prime_counts = prime_df["PRODUCT_NAME"].value_counts()
+prime_df["PRODUCT_NAME"] = prime_df["PRODUCT_NAME"].map(
+    lambda x: x if prime_counts.get(x, 0) >= threshold else "another product"
+)
+
+# Transaction
+transaction_counts = transaction_df["PRODUCT_NAME"].value_counts()
+transaction_df["PRODUCT_NAME"] = transaction_df["PRODUCT_NAME"].map(
+    lambda x: x if transaction_counts.get(x, 0) >= threshold else "another product"
+)
