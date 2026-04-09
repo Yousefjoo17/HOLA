@@ -165,9 +165,9 @@ prime_df = prime_df.drop_duplicates(subset=['RIMNO']).merge(user_item_matrix, on
 
 # 1. Standard RFM (Recency, Frequency, Monetary)
 rfm_features = transaction_df.groupby('RIMNO').agg(
-    TOTAL_SPEND_AMT=('SETTLEMENT AMT', 'sum'),
-    AVG_TRXN_AMT=('SETTLEMENT AMT', 'mean'),
-    TRXN_COUNT=('SETTLEMENT AMT', 'count'),
+    TOTAL_SPEND_AMT=('BILLING AMT', 'sum'),
+    AVG_TRXN_AMT=('BILLING AMT', 'mean'),
+    TRXN_COUNT=('BILLING AMT', 'count'),
     DAYS_SINCE_LAST_TRXN=('TRXN DATE', lambda x: (pd.to_datetime('today') - x.max()).days)
 ).reset_index()
 
@@ -176,7 +176,7 @@ rfm_features = transaction_df.groupby('RIMNO').agg(
 # We pivot to get the total spend per MCC per customer
 mcc_spend = pd.pivot_table(
     transaction_df, 
-    values='SETTLEMENT AMT', 
+    values='BILLING AMT', 
     index='RIMNO', 
     columns='MCC', 
     aggfunc='sum', 
@@ -204,3 +204,27 @@ prime_df = prime_df.merge(travel_features, on='RIMNO', how='left')
 trxn_feature_cols = rfm_features.columns.tolist() + mcc_spend.columns.tolist() + travel_features.columns.tolist()
 trxn_feature_cols.remove('RIMNO')
 prime_df[trxn_feature_cols] = prime_df[trxn_feature_cols].fillna(0)
+
+
+
+# 1. Calculate Age
+prime_df['AGE'] = (extraction_date - prime_df['DOB']).dt.days // 365
+
+# 2. Create Age Bands (Categorical feature for easier targeting)
+bins = [18, 25, 35, 50, 65, 100]
+labels = ['18-25', '26-35', '36-50', '51-65', '65+']
+prime_df['AGE_GROUP'] = pd.cut(prime_df['AGE'], bins=bins, labels=labels, right=True)
+
+# 3. Credit Limit Bands
+# Helps group high-net-worth vs standard customers
+limit_bins = [0, 10000, 50000, 100000, 500000, np.inf]
+limit_labels = ['Low', 'Medium', 'High', 'Very High', 'Premium']
+prime_df['LIMIT_BAND'] = pd.cut(prime_df['CREDIT_LIMIT'], bins=limit_bins, labels=limit_labels)
+
+
+# One-Hot Encoding Demographics
+cols_to_ohe = ['GENDER', 'AGE_GROUP', 'LIMIT_BAND', 'CUSTOMER_TYPE']
+prime_df = pd.get_dummies(prime_df, columns=cols_to_ohe, drop_first=True)
+
+# Note: For Target Encoding high-cardinality variables like BRANCH_NAME, 
+# you will need to do this later during your train/test split to avoid data leakage.
