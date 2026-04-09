@@ -159,3 +159,48 @@ user_item_matrix.columns = [f"HAS_PROD_{col.strip().replace(' ', '_')}" for col 
 
 # Merge back to prime_df (dropping duplicates if a RIMNO has multiple rows in prime_df)
 prime_df = prime_df.drop_duplicates(subset=['RIMNO']).merge(user_item_matrix, on='RIMNO', how='left')
+
+# ASSUMPTION: transaction_df has a column 'RIMNO' to link to prime_df. 
+# If it uses an account number, you will need to map that to RIMNO first.
+
+# 1. Standard RFM (Recency, Frequency, Monetary)
+rfm_features = transaction_df.groupby('RIMNO').agg(
+    TOTAL_SPEND_AMT=('SETTLEMENT AMT', 'sum'),
+    AVG_TRXN_AMT=('SETTLEMENT AMT', 'mean'),
+    TRXN_COUNT=('SETTLEMENT AMT', 'count'),
+    DAYS_SINCE_LAST_TRXN=('TRXN DATE', lambda x: (pd.to_datetime('today') - x.max()).days)
+).reset_index()
+
+# 2. Spend by Merchant Category Code (MCC) or Description
+# This tells you if they are a traveler, foodie, online shopper, etc.
+# We pivot to get the total spend per MCC per customer
+mcc_spend = pd.pivot_table(
+    transaction_df, 
+    values='SETTLEMENT AMT', 
+    index='RIMNO', 
+    columns='MCC', 
+    aggfunc='sum', 
+    fill_value=0
+)
+# Rename columns for clarity (e.g., MCC_5411_SPEND)
+mcc_spend.columns = [f"MCC_{str(col)}_SPEND" for col in mcc_spend.columns]
+mcc_spend = mcc_spend.reset_index()
+
+# 3. Cross-Border vs. Domestic Spend
+# Customers who travel often (spend in foreign CCY or Country) might need specific travel cards
+transaction_df['IS_FOREIGN_TRXN'] = (transaction_df['TRXN COUNTRY'] != 'EG').astype(int) # Assuming base country is Egypt
+
+travel_features = transaction_df.groupby('RIMNO').agg(
+    FOREIGN_TRXN_COUNT=('IS_FOREIGN_TRXN', 'sum'),
+    FOREIGN_SPEND_RATIO=('IS_FOREIGN_TRXN', 'mean') # Percentage of transactions done abroad
+).reset_index()
+
+# Merge all transactional features back to prime_df
+prime_df = prime_df.merge(rfm_features, on='RIMNO', how='left')
+prime_df = prime_df.merge(mcc_spend, on='RIMNO', how='left')
+prime_df = prime_df.merge(travel_features, on='RIMNO', how='left')
+
+# Fill NaNs for customers with no transactions
+trxn_feature_cols = rfm_features.columns.tolist() + mcc_spend.columns.tolist() + travel_features.columns.tolist()
+trxn_feature_cols.remove('RIMNO')
+prime_df[trxn_feature_cols] = prime_df[trxn_feature_cols].fillna(0)
