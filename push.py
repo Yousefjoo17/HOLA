@@ -135,12 +135,12 @@ print("Frequencies successfully exported to 'category_frequencies.txt'")
 
 
 
-threshold = 1000
+Product_frequency_threshold = 1000
 
 # Prime
 prime_counts = prime_df["PRODUCT_NAME"].value_counts()
 prime_df["PRODUCT_NAME"] = prime_df["PRODUCT_NAME"].map(
-    lambda x: x if prime_counts.get(x, 0) >= threshold else "another product"
+    lambda x: x if prime_counts.get(x, 0) >= Product_frequency_threshold else "another product"
 )
 
 # Transaction
@@ -149,6 +149,11 @@ transaction_df["PRODUCT_NAME"] = transaction_df["PRODUCT_NAME"].map(
     lambda x: x if transaction_counts.get(x, 0) >= threshold else "another product"
 )
 
+MCC_frequency_threshold = 5000
+transaction_counts = transaction_df["MCC"].value_counts()
+transaction_df["MCC"] = transaction_df["MCC"].map(
+    lambda x: x if transaction_counts.get(x, 0) >= MCC_frequency_threshold else "another product"
+)
 
 
 # Create a binary matrix of Customer (RIMNO) vs. Product Holding
