@@ -111,15 +111,24 @@ for col in prime_categorical_cols:
 
 
 
-#=========================transaction Encoding ==========================
+#========================= Transaction & Prime Encoding Export ==========================
 trxn_categorical_cols = ["DESCRIPTION","CCY","MCC","SETTLEMENT CCY","BANKBRANCH","TRXN COUNTRY","REVERSAL FLAG"]
-for col in trxn_categorical_cols:
-    print(f"\n--- Frequency of unique values in {col} ---")
-    # Using value_counts(dropna=False) to also see the count of missing values
-    print(transaction_df[col].value_counts(dropna=False))
-
-#=====================Prime Encoding=========================
 prime_categorical_cols = ["BRANCH_NAME",'FIRST_REPLACED_CARD', 'SECOND_REPLACED_CARD','THIRD_REPLACED_CARD']
-for col in prime_categorical_cols:
-    print(f"\n--- Frequency of unique values in {col} ---")
-    print(prime_df[col].value_counts(dropna=False))
+
+# Open a text file in write mode ('w')
+with open("category_frequencies.txt", "w", encoding="utf-8") as file:
+    
+    # Write Transaction data
+    file.write("========================= Transaction Frequencies =========================\n")
+    for col in trxn_categorical_cols:
+        file.write(f"\n--- Frequency of unique values in {col} ---\n")
+        # Convert the Series to a string and write it, followed by a newline character
+        file.write(transaction_df[col].value_counts(dropna=False).to_string() + "\n")
+
+    # Write Prime data
+    file.write("\n========================= Prime Frequencies =========================\n")
+    for col in prime_categorical_cols:
+        file.write(f"\n--- Frequency of unique values in {col} ---\n")
+        file.write(prime_df[col].value_counts(dropna=False).to_string() + "\n")
+
+print("Frequencies successfully exported to 'category_frequencies.txt'")
