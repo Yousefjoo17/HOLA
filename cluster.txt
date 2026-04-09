@@ -1,0 +1,143 @@
+import numpy as np
+import pandas as pd
+
+from sklearn.preprocessing import RobustScaler
+from sklearn.mixture import GaussianMixture
+from sklearn.metrics import silhouette_score
+from sklearn.ensemble import IsolationForest
+
+# ==============================
+# 1. MAIN CLASS
+# ==============================
+
+class CustomerSegmentationModel:
+    def __init__(self, k_range=(2, 10), local_contamination=0.03, global_contamination=0.01, random_state=42):
+        self.k_range = k_range
+        self.local_contamination = local_contamination
+        self.global_contamination = global_contamination
+        self.random_state = random_state
+        
+        self.scaler = RobustScaler()
+        self.gmm = None
+        self.best_k = None
+
+    # --------------------------
+    # 2. SCALE DATA
+    # --------------------------
+    def preprocess(self, X):
+        return self.scaler.fit_transform(X)
+
+    # --------------------------
+    # 3. FIND BEST K (Silhouette)
+    # --------------------------
+    def find_best_k(self, X_scaled):
+        best_score = -1
+        best_k = None
+
+        for k in range(self.k_range[0], self.k_range[1] + 1):
+            gmm = GaussianMixture(n_components=k, random_state=self.random_state)
+            labels = gmm.fit_predict(X_scaled)
+
+            # Silhouette needs >1 cluster
+            if len(np.unique(labels)) > 1:
+                score = silhouette_score(X_scaled, labels)
+                
+                if score > best_score:
+                    best_score = score
+                    best_k = k
+
+        self.best_k = best_k
+        return best_k, best_score
+
+    # --------------------------
+    # 4. FIT CLUSTERING
+    # --------------------------
+    def fit_clustering(self, X_scaled):
+        self.gmm = GaussianMixture(
+            n_components=self.best_k,
+            covariance_type='full',
+            random_state=self.random_state
+        )
+        self.gmm.fit(X_scaled)
+        return self.gmm.predict(X_scaled)
+
+    # --------------------------
+    # 5. LOCAL OUTLIERS
+    # --------------------------
+    def detect_local_outliers(self, X_scaled, clusters):
+        outliers = np.zeros(len(X_scaled), dtype=bool)
+
+        for c in np.unique(clusters):
+            idx = clusters == c
+
+            clf = IsolationForest(
+                contamination=self.local_contamination,
+                random_state=self.random_state
+            )
+
+            preds = clf.fit_predict(X_scaled[idx])
+            outliers[idx] = preds == -1
+
+        return outliers
+
+    # --------------------------
+    # 6. GLOBAL OUTLIERS
+    # --------------------------
+    def detect_global_outliers(self, X_scaled):
+        clf = IsolationForest(
+            contamination=self.global_contamination,
+            random_state=self.random_state
+        )
+
+        preds = clf.fit_predict(X_scaled)
+        return preds == -1
+
+    # --------------------------
+    # 7. FULL PIPELINE
+    # --------------------------
+    def fit_predict(self, X):
+        # Step 1: Scale
+        X_scaled = self.preprocess(X)
+
+        # Step 2: Find best K
+        best_k, score = self.find_best_k(X_scaled)
+        print(f"Best k: {best_k}, Silhouette Score: {score:.4f}")
+
+        # Step 3: Clustering
+        clusters = self.fit_clustering(X_scaled)
+
+        # Step 4: Local Outliers
+        local_outliers = self.detect_local_outliers(X_scaled, clusters)
+
+        # Step 5: Global Outliers
+        global_outliers = self.detect_global_outliers(X_scaled)
+
+        # Step 6: Final Outliers
+        final_outliers = local_outliers | global_outliers
+
+        return {
+            "clusters": clusters,
+            "local_outliers": local_outliers,
+            "global_outliers": global_outliers,
+            "final_outliers": final_outliers,
+            "best_k": self.best_k
+        }
+
+
+# Usage
+	# Assume df is your dataset (only numeric features)
+
+	# Optional: log transform skewed columns
+	df['amount'] = np.log1p(df['amount'])
+
+	X = df.values
+
+	model = CustomerSegmentationModel(k_range=(2, 8))
+	
+	results = model.fit_predict(X)
+
+	df['cluster'] = results['clusters']
+	df['is_outlier'] = results['final_outliers']
+
+	cluster_summary = df.groupby('cluster').mean()
+	print(cluster_summary)
