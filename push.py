@@ -193,7 +193,10 @@ mcc_spend = mcc_spend.reset_index()
 
 # 3. Cross-Border vs. Domestic Spend
 # Customers who travel often (spend in foreign CCY or Country) might need specific travel cards
-transaction_df['IS_FOREIGN_TRXN'] = (transaction_df['TRXN COUNTRY'] != 'EG').astype(int) # Assuming base country is Egypt
+# 3. Cross-Border vs. Domestic Spend
+# Evaluate condition, fill NA results with False, then convert to int
+transaction_df['IS_FOREIGN_TRXN'] = (transaction_df['TRXN COUNTRY'] != 'EG').fillna(False).astype(int)
+#transaction_df['IS_FOREIGN_TRXN'] = (transaction_df['TRXN COUNTRY'] != 'EG').astype(int) # Assuming base country is Egypt
 
 travel_features = transaction_df.groupby('RIMNO').agg(
     FOREIGN_TRXN_COUNT=('IS_FOREIGN_TRXN', 'sum'),
