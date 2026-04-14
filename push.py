@@ -48,6 +48,16 @@ for col in prime_float_cols:
 for col in prime_int_cols:
     prime_df[col] = prime_df[col].apply(parse_int)
 
+prime_df['DOB'] = pd.to_datetime(prime_df['DOB'], errors='coerce')
+# Find rows where DOB is not null, but fails to parse as a datetime
+bad_dates = prime_df[
+    pd.to_datetime(prime_df['DOB'], errors='coerce').isna() & 
+    prime_df['DOB'].notna()
+]
+
+print("These are the problematic DOB entries:")
+print(bad_dates['DOB'].unique())
+
 prime_df = prime_df.drop(columns=["MAPPING_ACCNO","MIN_PAYMENT","OVER_LIMIT","TOTAL_HOLD"])
 print(prime_df.info())
 
