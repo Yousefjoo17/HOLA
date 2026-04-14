@@ -7,66 +7,87 @@ from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 from category_encoders import TargetEncoder
 import glob
 
-prime_string_cols =["BRANCH_NAME","ACTIVATED","STATUS","STATUS_NAME","NAME","GENDER","CUSTOMER_TYPE","Card account status ","ORGANIZATION"]
+prime_string_cols = ["BRANCH_NAME","ACTIVATED","STATUS","STATUS_NAME","NAME","GENDER","CUSTOMER_TYPE","Card account status ","ORGANIZATION"]
 prime_int_cols = ["RIMNO"]
 prime_float_cols = ["AVAILABLE_LIMIT","LEDGER_BALANCE","LAST_PAYMENT_AMOUNT","OVERDUEAMOUNT"]
-prime_date_cols =["DOB","CREATION_DATE","LAST_STAEMENT_DATE","LAST_PAYMENT_DATE","CLOSURE_DATE"]
+prime_date_cols = ["DOB","CREATION_DATE","LAST_STAEMENT_DATE","LAST_PAYMENT_DATE","CLOSURE_DATE"]
 
-def parse_int(x):
-    if pd.isna(x):
-        return pd.NA
-    x_str = str(x).strip()
-    x_clean  = x_str.replace(",", "")
-    if x_clean.endswith(".00"):     
-        x_clean = x_clean[:-3]
-    try:
-        return int(x_clean)
-    except ValueError:
-        return np.nan 
-def parse_float(x):
-    if pd.isna(x):
-        return pd.nan
-    x_str = str(x).strip()
-    x_clean  = x_str.replace(",", "")
-    try:
-        return float(x_clean)
-    except ValueError:
-        return np.nan
-    
-#=========================prime==========================
-prime_files =glob.glob("prime/*.csv")
+# ========================= 1. Load Data ==========================
+prime_files = glob.glob("prime/*.csv")
 prime_df_list = []
+
+print("Loading CSV files...")
 for file in prime_files:
-    df = pd.read_csv(file)
-    prime_df_list.append(pd.read_csv(file,encoding='latin',dtype={col:"string" for col in prime_string_cols+prime_int_cols+prime_float_cols},
-                                      parse_dates=prime_date_cols).rename(columns={'RIM_NO':'RIMNO', "NAME":"PRODUCT_NAME"}))
+    # Note: Removed the redundant `df = pd.read_csv(file)` to double your loading speed
+    temp_df = pd.read_csv(
+        file, 
+        encoding='latin', 
+        dtype={col: "string" for col in prime_string_cols + prime_int_cols + prime_float_cols},
+        parse_dates=prime_date_cols
+    ).rename(columns={'RIM_NO': 'RIMNO', "NAME": "PRODUCT_NAME"})
+    
+    prime_df_list.append(temp_df)
     
 prime_df = pd.concat(prime_df_list, ignore_index=True)
 
-for col in prime_float_cols:
-    prime_df[col] = prime_df[col].apply(parse_float)
-for col in prime_int_cols:
-    prime_df[col] = prime_df[col].apply(parse_int)
+# Because "NAME" was renamed to "PRODUCT_NAME" during read_csv, we need to update our list 
+# so the casting loop can find it.
+actual_string_cols = ["PRODUCT_NAME" if col == "NAME" else col for col in prime_string_cols]
 
-prime_df['DOB'] = pd.to_datetime(prime_df['DOB'], errors='coerce')
 
-bad_dates = prime_df[
-    pd.to_datetime(prime_df['DOB'], errors='coerce').isna() & 
-    prime_df['DOB'].notna()
-]
+# ========================= 2. Casting & Reporting ==========================
+print("\n--- Casting Columns and Checking Nulls ---")
 
-print("These are the problematic DOB entries:")
-print(bad_dates['DOB'].unique())
+def apply_cast_and_report(df, columns, cast_type):
+    for col in columns:
+        if col not in df.columns:
+            print(f"Warning: Column '{col}' not found in dataframe. Skipping.")
+            continue
+            
+        # Count nulls before
+        nulls_before = df[col].isna().sum()
+        
+        # Apply the specific vectorized casting logic
+        if cast_type == 'string':
+            df[col] = df[col].astype("string")
+            
+        elif cast_type == 'float':
+            df[col] = df[col].astype(str).str.replace(",", "", regex=False)
+            df[col] = pd.to_numeric(df[col], errors='coerce')
+            
+        elif cast_type == 'int':
+            df[col] = df[col].astype(str).str.replace(",", "", regex=False)
+            df[col] = pd.to_numeric(df[col], errors='coerce').astype('Int64')
+            
+        elif cast_type == 'date':
+            df[col] = pd.to_datetime(df[col], errors='coerce')
+            
+        # Count nulls after
+        nulls_after = df[col].isna().sum()
+        
+        # Print the results
+        print(f"[{col}] Type: {df[col].dtype} | Nulls: {nulls_before} -> {nulls_after}")
 
-# 1. Clean the strings: remove commas
-prime_df['RIMNO'] = prime_df['RIMNO'].astype(str)
-# 2. Convert to numeric (forcing errors to NaN), then cast to the Nullable Integer type
-prime_df['RIMNO'] = pd.to_numeric(prime_df['RIMNO'], errors='coerce').astype('Int64')
-# 3. Check exactly how many null values exist in the RIMNO column now
-rimno_null_count = prime_df['RIMNO'].isna().sum()
-print(f"Total null values in RIMNO: {rimno_null_count}")
+# Execute the casting function for each group
+print("\n-> String Columns:")
+apply_cast_and_report(prime_df, actual_string_cols, 'string')
 
-prime_df = prime_df.drop(columns=["MAPPING_ACCNO","MIN_PAYMENT","OVER_LIMIT","TOTAL_HOLD"])
+print("\n-> Float Columns:")
+apply_cast_and_report(prime_df, prime_float_cols, 'float')
+
+print("\n-> Integer Columns:")
+apply_cast_and_report(prime_df, prime_int_cols, 'int')
+
+print("\n-> Date Columns:")
+apply_cast_and_report(prime_df, prime_date_cols, 'date')
+
+# ========================= 3. Cleanup & Final Info ==========================
+columns_to_drop = ["MAPPING_ACCNO", "MIN_PAYMENT", "OVER_LIMIT", "TOTAL_HOLD"]
+# Only drop columns that actually exist to prevent errors
+existing_cols_to_drop = [col for col in columns_to_drop if col in prime_df.columns]
+prime_df = prime_df.drop(columns=existing_cols_to_drop)
+
+print("\n--- Final Dataframe Info ---")
 print(prime_df.info())
 
 #=========================transaction==========================
