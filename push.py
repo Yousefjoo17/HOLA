@@ -142,6 +142,41 @@ apply_cast_and_report(transaction_df, transaction_date_cols, 'date')
 print("\n--- Final Transaction Dataframe Info ---")
 print(transaction_df.info())
 
+def drop_empty_records(df, columns):
+    """
+    Drops rows from a dataframe if they are missing data in the specified columns.
+    Prints a summary of how many rows were removed.
+    """
+    # Safeguard: if a single string is passed instead of a list, convert it
+    if isinstance(columns, str):
+        columns = [columns]
+        
+    # Filter the list to only include columns that actually exist in the dataframe
+    valid_cols = [col for col in columns if col in df.columns]
+    
+    if not valid_cols:
+        print(f"\nWarning: None of the specified columns {columns} exist in the dataframe. No rows dropped.")
+        return df
+        
+    # Count rows before dropping
+    rows_before = len(df)
+    
+    # Drop the empty records
+    cleaned_df = df.dropna(subset=valid_cols, how='any')
+    
+    # Report the results
+    rows_after = len(cleaned_df)
+    rows_dropped = rows_before - rows_after
+    
+    print(f"\n--- Dropping Empty Records ---")
+    print(f"Checked columns: {valid_cols}")
+    print(f"Dropped {rows_dropped} rows.")
+    print(f"Total rows remaining: {rows_after}")
+    
+    return cleaned_df
+
+critical_columns = ['BRANCH_NAME', 'BRANCH_ID', 'RIMNO']
+prime_df = drop_empty_records(prime_df, critical_columns)
 
 prime_df["GENDER"] = prime_df[col].fillna("Unknown")
 transaction_df['ORIG AMOUNT'] = transaction_df['ORIG AMOUNT'].fillna(transaction_df['ORIG AMOUNT'].median())
