@@ -39,7 +39,7 @@ prime_df_list = []
 for file in prime_files:
     df = pd.read_csv(file)
     prime_df_list.append(pd.read_csv(file,encoding='latin',dtype={col:"string" for col in prime_string_cols+prime_int_cols+prime_float_cols},
-                                      parse_dates=prime_date_cols).rename(columns={'RIM_NO:':'RIMNO'}))
+                                      parse_dates=prime_date_cols).rename(columns={'RIM_NO':'RIMNO', "NAME":"PRODUCT_NAME"}))
     
 prime_df = pd.concat(prime_df_list, ignore_index=True)
 
