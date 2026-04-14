@@ -96,20 +96,52 @@ prime_df = prime_df.drop(columns=existing_cols_to_drop)
 print("\n--- Final Dataframe Info ---")
 print(prime_df.info())
 
-#=========================transaction==========================
-transacion_string_cols = ["DESCRIPTION","MERCHNAME","MERCH ID","SOURCES","BANKBRANCH","TRXN COUNTRY","REVERSAL FLAG"]
-transacion_int_cols = []
-transacion_float_cols = []
-transacion_date_cols = ["TRXN DATE","POST DATE"]
-transaction_files = glob.glob("transaction/*.csv")\
+# ========================= 4. Load Transaction Data ==========================
+print("\nLoading Transaction files...")
 
+transaction_string_cols = ["DESCRIPTION", "MERCHNAME", "MERCH ID", "SOURCES", "BANKBRANCH", "TRXN COUNTRY", "REVERSAL FLAG"]
+transaction_int_cols = []
+transaction_float_cols = []
+transaction_date_cols = ["TRXN DATE", "POST DATE"]
+
+# Removed the trailing backslash here
+transaction_files = glob.glob("transaction/*.csv")
 transaction_df_list = []
+
 for file in transaction_files:
-    transaction_df_list.append(pd.read_excel(file,encoding='latin',dtype={col:"string" for col in transacion_string_cols+transacion_int_cols+transacion_float_cols},
-                                      parse_dates=transacion_date_cols))
+    # FIXED: Changed pd.read_excel to pd.read_csv to match the .csv file extension
+    temp_df = pd.read_csv(
+        file,
+        encoding='latin',
+        dtype={col: "string" for col in transaction_string_cols + transaction_int_cols + transaction_float_cols},
+        parse_dates=transaction_date_cols
+    )
+    transaction_df_list.append(temp_df)
+
 transaction_df = pd.concat(transaction_df_list, ignore_index=True)
 
+
+# ========================= 5. Transaction Casting & Reporting ==========================
+print("\n--- Casting Transaction Columns and Checking Nulls ---")
+
+print("\n-> Transaction String Columns:")
+apply_cast_and_report(transaction_df, transaction_string_cols, 'string')
+
+print("\n-> Transaction Float Columns:")
+# Even though this list is currently empty, it's good practice to leave this here 
+# in case you add float columns to the list later!
+apply_cast_and_report(transaction_df, transaction_float_cols, 'float')
+
+print("\n-> Transaction Integer Columns:")
+apply_cast_and_report(transaction_df, transaction_int_cols, 'int')
+
+print("\n-> Transaction Date Columns:")
+apply_cast_and_report(transaction_df, transaction_date_cols, 'date')
+
+# ========================= 6. Final Transaction Info ==========================
+print("\n--- Final Transaction Dataframe Info ---")
 print(transaction_df.info())
+
 
 prime_df["GENDER"] = prime_df[col].fillna("Unknown")
 transaction_df['ORIG AMOUNT'] = transaction_df['ORIG AMOUNT'].fillna(transaction_df['ORIG AMOUNT'].median())
