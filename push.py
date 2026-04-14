@@ -49,7 +49,7 @@ for col in prime_int_cols:
     prime_df[col] = prime_df[col].apply(parse_int)
 
 prime_df['DOB'] = pd.to_datetime(prime_df['DOB'], errors='coerce')
-# Find rows where DOB is not null, but fails to parse as a datetime
+
 bad_dates = prime_df[
     pd.to_datetime(prime_df['DOB'], errors='coerce').isna() & 
     prime_df['DOB'].notna()
@@ -57,6 +57,14 @@ bad_dates = prime_df[
 
 print("These are the problematic DOB entries:")
 print(bad_dates['DOB'].unique())
+
+# 1. Clean the strings: remove commas
+prime_df['RIMNO'] = prime_df['RIMNO'].astype(str)
+# 2. Convert to numeric (forcing errors to NaN), then cast to the Nullable Integer type
+prime_df['RIMNO'] = pd.to_numeric(prime_df['RIMNO'], errors='coerce').astype('Int64')
+# 3. Check exactly how many null values exist in the RIMNO column now
+rimno_null_count = prime_df['RIMNO'].isna().sum()
+print(f"Total null values in RIMNO: {rimno_null_count}")
 
 prime_df = prime_df.drop(columns=["MAPPING_ACCNO","MIN_PAYMENT","OVER_LIMIT","TOTAL_HOLD"])
 print(prime_df.info())
