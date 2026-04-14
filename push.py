@@ -39,6 +39,9 @@ actual_string_cols = ["PRODUCT_NAME" if col == "NAME" else col for col in prime_
 print("\n--- Casting Columns and Checking Nulls ---")
 
 def apply_cast_and_report(df, columns, cast_type):
+    # Get the total number of rows for our percentage math
+    total_rows = len(df)
+    
     for col in columns:
         if col not in df.columns:
             print(f"Warning: Column '{col}' not found in dataframe. Skipping.")
@@ -65,8 +68,11 @@ def apply_cast_and_report(df, columns, cast_type):
         # Count nulls after
         nulls_after = df[col].isna().sum()
         
-        # Print the results
-        print(f"[{col}] Type: {df[col].dtype} | Nulls: {nulls_before} -> {nulls_after}")
+        # Calculate percentage of missing data
+        pct_missing = (nulls_after / total_rows) * 100
+        
+        # Print the results, adding the percentage formatted to 2 decimal places
+        print(f"[{col}] Type: {df[col].dtype} | Nulls: {nulls_before} -> {nulls_after} ({pct_missing:.2f}% missing)")
 
 # Execute the casting function for each group
 print("\n-> String Columns:")
