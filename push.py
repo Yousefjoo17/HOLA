@@ -425,7 +425,3 @@ else:
 # prime_df.to_csv("model_ready_prime.csv", index=False)
 
 
-# Returns a list of column names where the type is 'object'
-object_columns = df.select_dtypes(include=['object']).columns.tolist()
-
-print(object_columns)
