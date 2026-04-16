@@ -392,7 +392,7 @@ prime_df['LIMIT_BAND'] = pd.cut(prime_df['CREDIT_LIMIT'], bins=limit_bins, label
 
 
 # One-Hot Encoding Demographics
-cols_to_ohe = ['GENDER', 'AGE_GROUP', 'LIMIT_BAND', 'CUSTOMER_TYPE']
+cols_to_ohe = ['GENDER', 'AGE_GROUP', 'LIMIT_BAND', 'CUSTOMER_TYPE', 'ACTIVATED']
 prime_df = pd.get_dummies(prime_df, columns=cols_to_ohe, drop_first=True)
 
 # Note: For Target Encoding high-cardinality variables like BRANCH_NAME, 
