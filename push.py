@@ -180,8 +180,25 @@ prime_df = drop_empty_records(prime_df, critical_columns)
 
 prime_df["GENDER"] = prime_df[col].fillna("Unknown")
 transaction_df['ORIG AMOUNT'] = transaction_df['ORIG AMOUNT'].fillna(transaction_df['ORIG AMOUNT'].median())
-prime_df['ANNUAL_FEE'] =prime_df['ANNUAL_FEE'].fillna(prime_df['ANNUAL_FEE'].median())
-outlier_cols = ["BILLING AMT","SETTLEMENT AMT","ORIG AMOUNT"]
+
+prime_df['DOB_IS_MISSING'] = prime_df['DOB'].isna().astype(int) # 1 if missing, 0 if present
+if not prime_df['DOB'].dropna().empty:
+    # Convert dates to integers to safely find the exact median, then convert back
+    median_dob_int = prime_df['DOB'].dropna().astype('int64').median()
+    median_dob = pd.to_datetime(median_dob_int)
+    prime_df['DOB'] = prime_df['DOB'].fillna(median_dob)
+
+prime_df['LAST_STAEMENT_IS_MISSING'] = prime_df['LAST_STAEMENT_DATE'].isna().astype(int)
+latest_txns = transaction_df.groupby("RIMNO")["TRXN DATE"].max()
+prime_df['LAST_STAEMENT_DATE'] = prime_df['LAST_STAEMENT_DATE'].fillna(prime_df['RIMNO'].map(latest_txns))
+prime_df['LAST_STAEMENT_DATE'] = prime_df['LAST_STAEMENT_DATE'].fillna(prime_df['CREATION_DATE'])
+
+
+transaction_df["MERCHNAME"] = transaction_df["MERCHNAME"].fillna("UNKNOWN")
+transaction_df["BANKBRANCH"] = transaction_df["BANKBRANCH"].fillna("UNKNOWN")
+transaction_df["TRXN COUNTRY"] = transaction_df["TRXN COUNTRY"].fillna("UNKNOWN")
+
+outlier_cols = ["BILLING AMT","ORIG AMOUNT"]
 for col in outlier_cols:
     if col in transaction_df:
         p99= transaction_df[col].quantile(0.99)
