@@ -250,9 +250,6 @@ txn_recency["DAYS_SINCE_LAST_TXN"] = (extraction_date - txn_recency["TRXN DATE"]
 
 prime_df = prime_df.merge(txn_recency[["RIMNO","DAYS_SINCE_LAST_TXN"]], on="RIMNO", how="left") 
 
-prime_df['UTILIZATION_Ratio']= prime_df['LEDGER_BALANCE'] / prime_df['CREDIT_LIMIT'].replace({0: np.nan})
-prime_df["AVAILABLE_CREDIT_RATIO"] = prime_df["AVAILABLE_LIMIT"] / prime_df["CREDIT_LIMIT"].replace({0: np.nan})
-
 prime_df["FEE_TO_LIMIT_RATIO"] = (prime_df["JOINING_FEE"] + prime_df["ANNUAL_FEE"]) / prime_df["CREDIT_LIMIT"].replace({0: np.nan})
 prime_df["CARD_REPLACEMENT_FREQ"] =prime_df[['FIRST_REPLACED_CARD', 'SECOND_REPLACED_CARD','THIRD_REPLACED_CARD']].sum(axis=1)
 
@@ -395,5 +392,34 @@ prime_df['LIMIT_BAND'] = pd.cut(prime_df['CREDIT_LIMIT'], bins=limit_bins, label
 cols_to_ohe = ['GENDER', 'AGE_GROUP', 'LIMIT_BAND', 'CUSTOMER_TYPE', 'ACTIVATED']
 prime_df = pd.get_dummies(prime_df, columns=cols_to_ohe, drop_first=True)
 
-# Note: For Target Encoding high-cardinality variables like BRANCH_NAME, 
-# you will need to do this later during your train/test split to avoid data leakage.
+
+# ========================= Data Scaling ==========================
+print("\n--- Applying Data Scaling ---")
+
+# 1. Identify all current float columns in prime_df
+# This dynamically catches your original prime_float_cols that weren't dropped, 
+# PLUS your new engineered features (RFM, Ratios, MCC spends).
+float_cols_to_scale = prime_df.select_dtypes(include=['float64', 'float32']).columns.tolist()
+
+# 2. Initialize the Scaler
+# StandardScaler transforms data to have a mean of 0 and standard deviation of 1.
+# Swap to MinMaxScaler() if you need values strictly between 0 and 1.
+scaler = StandardScaler()
+
+# 3. Apply the scaler to the identified columns
+if float_cols_to_scale:
+    print(f"Scaling the following {len(float_cols_to_scale)} float columns:")
+    for col in float_cols_to_scale:
+        print(f" - {col}")
+        
+    # Fit and transform the data, replacing the original columns in place
+    prime_df[float_cols_to_scale] = scaler.fit_transform(prime_df[float_cols_to_scale])
+    
+    print("\nScaling complete. Statistical summary of a few scaled columns:")
+    # Display the first few scaled columns to verify the transformation (mean should be ~0)
+    print(prime_df[float_cols_to_scale[:5]].describe().round(3))
+else:
+    print("No float columns found to scale.")
+    
+# (Optional) Export the fully preprocessed, encoded, and scaled dataset
+# prime_df.to_csv("model_ready_prime.csv", index=False)
