@@ -1,71 +1,93 @@
-from sklearn.neighbors import NearestNeighbors
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, classification_report
+import numpy as np
+import pandas as pd
 
-# ========================= 7. User-Based Collaborative Filtering ==========================
-print("\n--- Building User-Based Collaborative Filtering Model ---")
+print("\n========================= Product Recommendation System =========================\n")
 
-# 1. Isolate the User-Item Matrix
-# We only want the product holding columns for the pure collaborative filtering approach
-product_cols = [col for col in prime_df.columns if col.startswith('HAS_PROD_')]
+# ---------------------------------------------------------
+# 1. Feature Selection & Target Isolation
+# ---------------------------------------------------------
+# Identify our target variables (the product holdings we want to predict)
+target_cols = [col for col in prime_df.columns if col.startswith('HAS_PROD_')]
+y = prime_df[target_cols]
 
-# Drop duplicates just in case, and set RIMNO as the index for easy lookups
-ui_matrix = prime_df.drop_duplicates(subset=['RIMNO']).set_index('RIMNO')[product_cols]
+# For features (X), we only want numeric/scaled columns. 
+# We MUST drop the target columns, and any unique identifiers (like RIMNO, BRANCH_ID) 
+# to prevent data leakage and overfitting.
+X = prime_df.select_dtypes(include=[np.number]).drop(columns=target_cols + ['RIMNO', 'BRANCH_ID'], errors='ignore')
 
-# 2. Fit the Nearest Neighbors Model
-# We use 'cosine' distance to find users with similar product portfolios.
-# n_neighbors is set to 11 because the closest neighbor is always the user themselves.
-knn_recommender = NearestNeighbors(metric='cosine', algorithm='brute', n_neighbors=11)
-knn_recommender.fit(ui_matrix)
-print("Collaborative Filtering model fitted successfully.")
+# ---------------------------------------------------------
+# 2. Train / Test Split
+# ---------------------------------------------------------
+# Standard 80/20 split for training and testing
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-def get_product_recommendations(target_rimno, ui_matrix, model, top_n_recs=3):
+print(f"Training data shape: {X_train.shape}")
+print(f"Testing data shape:  {X_test.shape}")
+
+# ---------------------------------------------------------
+# 3. Model Training
+# ---------------------------------------------------------
+print("\nTraining Random Forest Recommendation Model...")
+# n_jobs=-1 uses all available CPU cores to speed up training
+clf = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)
+clf.fit(X_train, y_train)
+
+# ---------------------------------------------------------
+# 4. Evaluation & Accuracy
+# ---------------------------------------------------------
+y_pred = clf.predict(X_test)
+
+# Exact Match Accuracy: In multi-label classification, this checks if the 
+# predicted combination of products is a 100% exact match to the actuals.
+exact_match_accuracy = accuracy_score(y_test, y_pred)
+print(f"\nExact Match Accuracy: {exact_match_accuracy * 100:.2f}%")
+
+# Because Exact Match is very strict, it's highly recommended to look at precision/recall per product:
+print("\nClassification Report (per product):")
+print(classification_report(y_test, y_pred, target_names=target_cols, zero_division=0))
+
+
+# ---------------------------------------------------------
+# 5. The Recommendation Engine
+# ---------------------------------------------------------
+def recommend_top_n_products(model, customer_features, product_names, top_n=2):
     """
-    Finds similar users and recommends products the target user doesn't already have.
+    Takes customer features and predicts the top N recommended products 
+    based on the model's confidence probabilities.
     """
-    if target_rimno not in ui_matrix.index:
-        return f"User {target_rimno} not found in the matrix."
+    # predict_proba returns a list of arrays for multi-label (one array per target class)
+    proba_list = model.predict_proba(customer_features)
+    
+    # Extract the probability of the positive class (class 1) for each product
+    # proba_list[i][:, 1] gets the probability that the target is 1
+    positive_probs = np.array([prob[:, 1] if prob.shape[1] > 1 else prob[:, 0] * 0 for prob in proba_list]).T
+    
+    recommendations = []
+    for i in range(len(customer_features)):
+        # Get indices of the highest probabilities for this specific user
+        top_indices = np.argsort(positive_probs[i])[::-1][:top_n]
+        
+        # Map indices back to clean product names and pair with their probability scores
+        user_recs = [
+            (product_names[idx].replace('HAS_PROD_', ''), positive_probs[i][idx]) 
+            for idx in top_indices
+        ]
+        recommendations.append(user_recs)
+        
+    return recommendations
 
-    # Get the target user's current holdings
-    user_vector = ui_matrix.loc[[target_rimno]]
-    products_owned = ui_matrix.columns[user_vector.values.flatten() > 0].tolist()
+# --- Test the Recommender on 5 Sample Customers ---
+print("\n--- Sample Recommendations for Top 5 Test Customers ---")
+sample_customers = X_test.head(5)
+recs = recommend_top_n_products(clf, sample_customers, target_cols, top_n=3)
 
-    # Find the nearest neighbors (distances and indices)
-    distances, indices = model.kneighbors(user_vector)
-    
-    # Flatten arrays and ignore the first item (which is the user themselves, distance 0)
-    neighbor_distances = distances.flatten()[1:]
-    neighbor_indices = indices.flatten()[1:]
-    
-    # Convert distances to similarity scores (Cosine Similarity = 1 - Cosine Distance)
-    similarities = 1 - neighbor_distances
-
-    # Get the holdings of these similar users
-    neighbor_holdings = ui_matrix.iloc[neighbor_indices]
-    
-    # Weight the neighbors' holdings by their similarity score
-    # A neighbor with 0.9 similarity has more vote weight than one with 0.5
-    weighted_holdings = neighbor_holdings.T.dot(similarities)
-    
-    # Filter out the products the target user already owns
-    recommendations = weighted_holdings.drop(labels=products_owned, errors='ignore')
-    
-    # Sort by highest recommendation score and get the Top N
-    top_recommendations = recommendations.sort_values(ascending=False).head(top_n_recs)
-    
-    # Clean up the output formatting
-    result = top_recommendations[top_recommendations > 0].to_dict()
-    clean_result = {k.replace('HAS_PROD_', ''): round(v, 3) for k, v in result.items()}
-    
-    return clean_result
-
-# ========================= 8. Testing the Recommender ==========================
-# Let's test it on a random existing customer
-sample_user = ui_matrix.index[0] 
-print(f"\n--- Recommendations for RIMNO: {sample_user} ---")
-
-# Show what they currently own
-owned = [col.replace('HAS_PROD_', '') for col in ui_matrix.columns if ui_matrix.loc[sample_user, col] > 0]
-print(f"Currently Owns: {owned}")
-
-# Generate Recommendations
-recs = get_product_recommendations(target_rimno=sample_user, ui_matrix=ui_matrix, model=knn_recommender, top_n_recs=3)
-print(f"Recommended Products (Weighted Score): {recs}")
+# Display the recommendations cleanly
+for i, (idx, rec) in enumerate(zip(sample_customers.index, recs)):
+    # If you mapped RIMNO back to the index, you can print the RIMNO here
+    print(f"Customer Profile Index [{idx}]:")
+    for rank, (product, prob) in enumerate(rec, 1):
+        print(f"  {rank}. {product} (Match Score: {prob*100:.1f}%)")
+        
