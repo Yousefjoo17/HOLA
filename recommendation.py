@@ -12,7 +12,7 @@ print("\n========================= Product Recommendation System ===============
 # Identify our target variables (the product holdings we want to predict)
 target_cols = [col for col in prime_df.columns if col.startswith('HAS_PROD_')]
 y = prime_df[target_cols]
-
+y = (y > 0).astype(int)
 # For features (X), we only want numeric/scaled columns. 
 # We MUST drop the target columns, and any unique identifiers (like RIMNO, BRANCH_ID) 
 # to prevent data leakage and overfitting.
