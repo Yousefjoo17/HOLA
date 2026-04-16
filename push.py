@@ -6,6 +6,38 @@ from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 from category_encoders import TargetEncoder
 import glob
+import pandas as pd
+
+def check_missing_values(df):
+    """
+    Analyzes a DataFrame for missing values and returns a summary table 
+    containing only the columns that have missing data.
+    """
+    # 1. Count missing values per column
+    missing_counts = df.isna().sum()
+    
+    # 2. Filter out columns that have 0 missing values
+    missing_counts = missing_counts[missing_counts > 0]
+    
+    # 3. Calculate the percentage of missing data
+    total_rows = len(df)
+    missing_percentages = (missing_counts / total_rows) * 100
+    
+    # 4. Create a clean summary DataFrame
+    summary_df = pd.DataFrame({
+        'Missing Count': missing_counts,
+        'Percentage (%)': missing_percentages.round(2)
+    })
+    
+    # 5. Sort from highest number of missing values to lowest
+    summary_df = summary_df.sort_values(by='Missing Count', ascending=False)
+    
+    # Check if the dataframe had no missing values at all
+    if summary_df.empty:
+        print("Great news! There are no missing values in this DataFrame.")
+        return None
+        
+    return summary_df
 
 prime_string_cols = ["BRANCH_NAME","ACTIVATED","STATUS","STATUS_NAME","PRODUCT_NAME","GENDER","ORGANIZATION","CUSTOMER_TYPE","Card account status "]
 prime_int_cols = ["BRANCH_ID","RIMNO"]
