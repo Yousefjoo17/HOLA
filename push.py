@@ -424,4 +424,28 @@ else:
 # (Optional) Export the fully preprocessed, encoded, and scaled dataset
 # prime_df.to_csv("model_ready_prime.csv", index=False)
 
+# ========================= Final NaN Handling ==========================
+print("\n--- Final Check for NaN Values ---")
 
+# 1. Identify columns with NaN values
+cols_with_nans = prime_df.columns[prime_df.isna().any()].tolist()
+
+if not cols_with_nans:
+    print("Clean sweep! No NaN values found in the final DataFrame.")
+else:
+    print(f"Found {len(cols_with_nans)} columns with missing values. Filling with median...")
+    
+    # 2. Iterate through columns with NaNs
+    for col in cols_with_nans:
+        # Check if the column is numerical (int or float)
+        if pd.api.types.is_numeric_dtype(prime_df[col]):
+            median_val = prime_df[col].median()
+            prime_df[col] = prime_df[col].fillna(median_val)
+            print(f" - Filled [{col}] with median: {median_val:.4f}")
+        else:
+            # For non-numeric columns remaining, fill with 'Unknown' or mode
+            mode_val = prime_df[col].mode()[0] if not prime_df[col].mode().empty else "Unknown"
+            prime_df[col] = prime_df[col].fillna(mode_val)
+            print(f" - Filled non-numeric [{col}] with mode/placeholder: {mode_val}")
+
+print("\nFinal NaN check complete. Total NaNs in DF:", prime_df.isna().sum().sum())
