@@ -1,5 +1,8 @@
+import pandas as pd
+import numpy as np
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
+from sklearn.impute import SimpleImputer
 import matplotlib.pyplot as plt
 
 # 1. Isolate clustering features by dropping IDs, dates, and product holdings
@@ -11,10 +14,31 @@ prod_cols = [col for col in prime_df.columns if 'HAS_PROD_' in col]
 features_df = prime_df.drop(columns=cols_to_drop + prod_cols, errors='ignore')
 features_df = features_df.select_dtypes(include=[np.number])
 
+# ========================= Missing Values Handling ==========================
+print("\n--- Checking for Missing Values before PCA ---")
+missing_before_pca = features_df.isna().sum()
+missing_cols = missing_before_pca[missing_before_pca > 0]
+
+if not missing_cols.empty:
+    print("Warning: Missing values found. Imputing with median...")
+    imputer = SimpleImputer(strategy='median')
+    # Fit and transform, then convert back to DataFrame to keep column names
+    features_to_use = pd.DataFrame(
+        imputer.fit_transform(features_df), 
+        columns=features_df.columns, 
+        index=features_df.index
+    )
+    print("Imputation complete.")
+else:
+    print("No missing values found. Data is ready for PCA.")
+    features_to_use = features_df
+# ============================================================================
+
 # 2. Dimensionality Reduction (Keep 95% of the variance)
+# Notice we are passing 'features_to_use' here, which is guaranteed to be null-free
 pca = PCA(n_components=0.95, random_state=42)
-reduced_features = pca.fit_transform(features_df)
-print(f"Reduced features from {features_df.shape[1]} to {reduced_features.shape[1]} dimensions.")
+reduced_features = pca.fit_transform(features_to_use)
+print(f"Reduced features from {features_to_use.shape[1]} to {reduced_features.shape[1]} dimensions.")
 
 # 3. Use the Elbow Method to find the optimal 'k'
 inertia = []
@@ -34,17 +58,19 @@ plt.ylabel('Inertia')
 plt.grid(True)
 plt.show()
 
-
-
 # 4. Fit final K-Means model
-optimal_k = 4 # Adjust this based on your elbow plot
+optimal_k = 4 # Adjust this based on your visual interpretation of the elbow plot
 final_kmeans = KMeans(n_clusters=optimal_k, random_state=42, n_init=10)
 prime_df['CLUSTER'] = final_kmeans.fit_predict(reduced_features)
 
 # 5. Profile the clusters (Inverse transform if you want to see unscaled raw numbers)
 # Let's look at the average behaviors per cluster to name them (e.g., "Wealthy Travelers", "Low-Spend Youth")
 profiling_cols = ['TOTAL_SPEND_AMT', 'AVG_TRXN_AMT', 'AGE', 'CREDIT_LIMIT', 'FOREIGN_SPEND_RATIO', 'FEE_TO_LIMIT_RATIO']
-cluster_summary = prime_df.groupby('CLUSTER')[profiling_cols].mean()
+
+# Safeguard: Only profile columns that actually exist in the dataframe
+actual_profiling_cols = [col for col in profiling_cols if col in prime_df.columns]
+
+cluster_summary = prime_df.groupby('CLUSTER')[actual_profiling_cols].mean()
 print("\n--- Cluster Profiles ---")
 print(cluster_summary)
 
