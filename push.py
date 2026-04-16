@@ -7,10 +7,10 @@ from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 from category_encoders import TargetEncoder
 import glob
 
-prime_string_cols = ["BRANCH_NAME","ACTIVATED","STATUS","STATUS_NAME","NAME","GENDER","CUSTOMER_TYPE","Card account status ","ORGANIZATION"]
-prime_int_cols = ["RIMNO"]
-prime_float_cols = ["AVAILABLE_LIMIT","LEDGER_BALANCE","LAST_PAYMENT_AMOUNT","OVERDUEAMOUNT"]
-prime_date_cols = ["DOB","CREATION_DATE","LAST_STAEMENT_DATE","LAST_PAYMENT_DATE","CLOSURE_DATE"]
+prime_string_cols = ["BRANCH_NAME","ACTIVATED","STATUS","STATUS_NAME","PRODUCT_NAME","GENDER","ORGANIZATION","CUSTOMER_TYPE","Card account status "]
+prime_int_cols = ["BRANCH_ID","RIMNO"]
+prime_float_cols = ["CREDIT_LIMIT","DELIQUENCY","JOINING_FEE","ANNUAL_FEE","LEDGER_BALANCE","AVAILABLE_LIMIT","LAST_PAYMENT_AMOUNT","OVERDUEAMOUNT","NO_OF_CYCLES","FIRST_REPLACED_CARD","SECOND_REPLACED_CARD","THIRD_REPLACED_CARD","SETTLEMENT AMT"]
+prime_date_cols = ["CREATION_DATE","LAST_STAEMENT_DATE","LAST_PAYMENT_DATE","DOB","CLOSURE_DATE"]
 
 # ========================= 1. Load Data ==========================
 prime_files = glob.glob("prime/*.csv")
@@ -100,8 +100,8 @@ print(prime_df.info())
 print("\nLoading Transaction files...")
 
 transaction_string_cols = ["DESCRIPTION", "MERCHNAME", "MERCH ID", "SOURCES", "BANKBRANCH", "TRXN COUNTRY", "REVERSAL FLAG"]
-transaction_int_cols = []
-transaction_float_cols = []
+transaction_int_cols = ["RIMNO","CCY","MCC","SETTLEMENT CCY"]
+transaction_float_cols = ["ORIG AMOUNT","EMBEDDED _FEE", "BILLING AMT", "SETTLEMENT AMT"]
 transaction_date_cols = ["TRXN DATE", "POST DATE"]
 
 # Removed the trailing backslash here
