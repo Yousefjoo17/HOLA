@@ -38,14 +38,69 @@ clf.fit(X_train, y_train)
 # ---------------------------------------------------------
 # 4. Evaluation & Accuracy
 # ---------------------------------------------------------
+from sklearn.metrics import accuracy_score, classification_report, precision_score, recall_score, f1_score
+
+# ---------------------------------------------------------
+# 4. Global Evaluation & Accuracy
+# ---------------------------------------------------------
+print("\n--- Global Model Performance ---")
 y_pred = clf.predict(X_test)
 
-# Exact Match Accuracy: In multi-label classification, this checks if the 
-# predicted combination of products is a 100% exact match to the actuals.
+# 1. Strict Exact Match (Hardest metric)
 exact_match_accuracy = accuracy_score(y_test, y_pred)
-print(f"\nExact Match Accuracy: {exact_match_accuracy * 100:.2f}%")
+print(f"Strict Exact Match Accuracy: {exact_match_accuracy * 100:.2f}% (Usually low in multi-label)")
 
-# Because Exact Match is very strict, it's highly recommended to look at precision/recall per product:
+# 2. Global "Micro" Averages (Treats every prediction across all customers equally)
+# This is your true "Global Percentage" for the model's overall correctness
+global_precision = precision_score(y_test, y_pred, average='micro', zero_division=0)
+global_recall = recall_score(y_test, y_pred, average='micro', zero_division=0)
+global_f1 = f1_score(y_test, y_pred, average='micro', zero_division=0)
+
+print(f"Global Precision: {global_precision * 100:.2f}% (When model predicts 'Yes', it's correct this often)")
+print(f"Global Recall:    {global_recall * 100:.2f}% (Out of all products held, model found this many)")
+print(f"Global F1-Score:  {global_f1 * 100:.2f}% (Overall balance of Precision & Recall)")
+
+# ---------------------------------------------------------
+# 4b. Business Metric: Recommendation Hit Rate (Precision @ K)
+# ---------------------------------------------------------
+print("\n--- Business Recommendation Accuracy (Top 3) ---")
+# Let's test how good the model is when we actually use it to recommend 3 products
+K = 3
+proba_list = clf.predict_proba(X_test)
+
+# Extract probabilities for the positive class (class 1)
+positive_probs = np.array([prob[:, 1] if prob.shape[1] > 1 else prob[:, 0] * 0 for prob in proba_list]).T
+
+hits = 0
+total_recommendations = 0
+at_least_one_hit_count = 0
+
+# Convert y_test to a numpy array for easier indexing
+y_test_array = y_test.values
+
+for i in range(len(X_test)):
+    # Get the column indices of the Top K recommended products for this user
+    top_k_indices = np.argsort(positive_probs[i])[::-1][:K]
+    
+    # Check what the actual ground truth is for those specific Top K products
+    actual_values_for_top_k = y_test_array[i, top_k_indices]
+    
+    # Count how many of our Top K recommendations the customer actually had
+    user_hits = np.sum(actual_values_for_top_k)
+    hits += user_hits
+    total_recommendations += K
+    
+    # Did we get at least one good recommendation for this user?
+    if user_hits > 0:
+        at_least_one_hit_count += 1
+
+global_hit_rate = hits / total_recommendations
+success_rate_per_user = at_least_one_hit_count / len(X_test)
+
+print(f"Precision @ {K}: {global_hit_rate * 100:.2f}% (Out of all products recommended, this % were actual matches)")
+print(f"User Success Rate: {success_rate_per_user * 100:.2f}% (Percentage of test users who received at least ONE correct recommendation)")
+
+# 3. Per-Product Breakdown
 print("\nClassification Report (per product):")
 print(classification_report(y_test, y_pred, target_names=target_cols, zero_division=0))
 
