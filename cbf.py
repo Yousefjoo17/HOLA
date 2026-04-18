@@ -85,26 +85,24 @@ print(prime_df.info())
 print("\n--- Building Collaborative Filtering Engine ---")
 
 # 1. Set RIMNO as the index so our matrix contains ONLY product 1s and 0s
-user_item_matrix_calc = prime_df.set_index('RIMNO')
+user_item_matrix = prime_df.set_index('RIMNO')
 
 # 2. Calculate Item-Item Cosine Similarity
 # We transpose (.T) the matrix because we want similarity between columns (products), not rows (users)
-item_sim_array = cosine_similarity(user_item_matrix_calc.T)
+item_sim_array = cosine_similarity(user_item_matrix.T)
 
 # 3. Convert the array back into a readable DataFrame
 item_sim_df = pd.DataFrame(
     item_sim_array, 
-    index=user_item_matrix_calc.columns, 
-    columns=user_item_matrix_calc.columns
+    index=user_item_matrix.columns, 
+    columns=user_item_matrix.columns
 )
 
 print("Item Similarity Matrix created successfully.")
 
-# ========================= 3. Evaluate Recommender System =========================
-print("\n--- Evaluating Recommender System ---")
 
-# ========================= 1. Train/Test Split (Masking) ==========================
-def create_train_test_split(user_matrix, test_ratio=0.2, random_state=42):
+# ========================= 3. Train/Test Split (Masking) ==========================
+def create_train_test_split(user_matrix, test_ratio, random_state=42):
     """
     Splits the user-item matrix by masking a percentage of known positives (1s).
     Users with only 1 product are kept entirely in the train set.
@@ -140,7 +138,7 @@ def create_train_test_split(user_matrix, test_ratio=0.2, random_state=42):
     return train_matrix, test_matrix
 
 # Execute the split
-train_df, test_df = create_train_test_split(user_item_matrix_calc, test_ratio=0.3)
+train_df, test_df = create_train_test_split(user_item_matrix, test_ratio=0.2)
 
 # ========================= 2. Re-train Similarity on Train Data =====================
 # Important: We must calculate item similarity ONLY on the training data 
