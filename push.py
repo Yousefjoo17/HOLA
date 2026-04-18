@@ -210,7 +210,7 @@ def drop_empty_records(df, columns):
 critical_columns = ['BRANCH_NAME', 'BRANCH_ID', 'RIMNO']
 prime_df = drop_empty_records(prime_df, critical_columns)
 
-prime_df["GENDER"] = prime_df[col].fillna("Unknown")
+prime_df["GENDER"] = prime_df["GENDER"].fillna("Unknown")
 transaction_df['ORIG AMOUNT'] = transaction_df['ORIG AMOUNT'].fillna(transaction_df['ORIG AMOUNT'].median())
 
 prime_df['DOB_IS_MISSING'] = prime_df['DOB'].isna().astype(int) # 1 if missing, 0 if present
@@ -304,7 +304,7 @@ prime_df["PRODUCT_NAME"] = prime_df["PRODUCT_NAME"].map(
 # Transaction
 transaction_counts = transaction_df["PRODUCT_NAME"].value_counts()
 transaction_df["PRODUCT_NAME"] = transaction_df["PRODUCT_NAME"].map(
-    lambda x: x if transaction_counts.get(x, 0) >= threshold else "another product"
+    lambda x: x if transaction_counts.get(x, 0) >= Product_frequency_threshold else "another product"
 )
 
 MCC_frequency_threshold = 5000
