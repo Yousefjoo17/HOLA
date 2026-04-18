@@ -1,47 +1,7 @@
 import pandas as pd 
 import numpy as np
-from datetime import datetime
-import sys
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
-from sklearn.preprocessing import LabelEncoder, OneHotEncoder
-from category_encoders import TargetEncoder
 import glob
-
-def check_missing_values(df):
-    """
-    Analyzes a DataFrame for missing values and returns a summary table 
-    containing only the columns that have missing data.
-    """
-    # 1. Count missing values per column
-    missing_counts = df.isna().sum()
-    
-    # 2. Filter out columns that have 0 missing values
-    missing_counts = missing_counts[missing_counts > 0]
-    
-    # 3. Calculate the percentage of missing data
-    total_rows = len(df)
-    missing_percentages = (missing_counts / total_rows) * 100
-    
-    # 4. Create a clean summary DataFrame
-    summary_df = pd.DataFrame({
-        'Missing Count': missing_counts,
-        'Percentage (%)': missing_percentages.round(2)
-    })
-    
-    # 5. Sort from highest number of missing values to lowest
-    summary_df = summary_df.sort_values(by='Missing Count', ascending=False)
-    
-    # Check if the dataframe had no missing values at all
-    if summary_df.empty:
-        print("Great news! There are no missing values in this DataFrame.")
-        return None
-        
-    return summary_df
-
-prime_string_cols = ["BRANCH_NAME","ACTIVATED","STATUS","STATUS_NAME","PRODUCT_NAME","GENDER","ORGANIZATION","CUSTOMER_TYPE","Card account status "]
-prime_int_cols = ["BRANCH_ID","RIMNO"]
-prime_float_cols = ["CREDIT_LIMIT","DELIQUENCY","JOINING_FEE","ANNUAL_FEE","LEDGER_BALANCE","AVAILABLE_LIMIT","LAST_PAYMENT_AMOUNT","OVERDUEAMOUNT","NO_OF_CYCLES","FIRST_REPLACED_CARD","SECOND_REPLACED_CARD","THIRD_REPLACED_CARD","SETTLEMENT AMT"]
-prime_date_cols = ["CREATION_DATE","LAST_STAEMENT_DATE","LAST_PAYMENT_DATE","DOB","CLOSURE_DATE"]
+from sklearn.metrics.pairwise import cosine_similarity
 
 # ========================= 1. Load Data ==========================
 prime_files = glob.glob("/path/to/prime/*.csv")
@@ -51,66 +11,12 @@ print("Loading CSV files...")
 for file in prime_files:
     temp_df = pd.read_csv(
         file, 
-        encoding='latin', 
-        dtype={col: "string" for col in prime_string_cols + prime_int_cols + prime_float_cols},
-        parse_dates=prime_date_cols
+        encoding='latin'
     ).rename(columns={'RIM_NO': 'RIMNO', "NAME": "PRODUCT_NAME"})
     
     prime_df_list.append(temp_df)
     
 prime_df = pd.concat(prime_df_list, ignore_index=True)
-
-# ========================= 2. Casting & Reporting ==========================
-print("\n--- Casting Columns and Checking Nulls ---")
-
-def apply_cast_and_report(df, columns, cast_type):
-    # Get the total number of rows for our percentage math
-    total_rows = len(df)
-    
-    for col in columns:
-        if col not in df.columns:
-            print(f"Warning: Column '{col}' not found in dataframe. Skipping.")
-            continue
-            
-        # Count nulls before
-        nulls_before = df[col].isna().sum()
-        
-        # Apply the specific vectorized casting logic
-        if cast_type == 'string':
-            df[col] = df[col].astype("string")
-            
-        elif cast_type == 'float':
-            df[col] = df[col].astype(str).str.replace(",", "", regex=False)
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-            
-        elif cast_type == 'int':
-            df[col] = df[col].astype(str).str.replace(",", "", regex=False)
-            df[col] = pd.to_numeric(df[col], errors='coerce').astype('Int64')
-            
-        elif cast_type == 'date':
-            df[col] = pd.to_datetime(df[col], errors='coerce')
-            
-        # Count nulls after
-        nulls_after = df[col].isna().sum()
-        
-        # Calculate percentage of missing data
-        pct_missing = (nulls_after / total_rows) * 100
-        
-        # Print the results, adding the percentage formatted to 2 decimal places
-        print(f"[{col}] Type: {df[col].dtype} | Nulls: {nulls_before} -> {nulls_after} ({pct_missing:.2f}% missing)")
-
-# Execute the casting function for each group
-print("\n-> String Columns:")
-apply_cast_and_report(prime_df, prime_string_cols, 'string')
-
-print("\n-> Float Columns:")
-apply_cast_and_report(prime_df, prime_float_cols, 'float')
-
-print("\n-> Integer Columns:")
-apply_cast_and_report(prime_df, prime_int_cols, 'int')
-
-print("\n-> Date Columns:")
-apply_cast_and_report(prime_df, prime_date_cols, 'date')
 
 
 def drop_empty_records(df, columns):
@@ -175,9 +81,7 @@ print(prime_df.head())
 print(prime_df.info())
 
 
-######################## Item-Item Collaborative Filtering ###############################
-from sklearn.metrics.pairwise import cosine_similarity
-
+# ========================= 2. Build Collaborative Filtering Engine =========================
 print("\n--- Building Collaborative Filtering Engine ---")
 
 # 1. Set RIMNO as the index so our matrix contains ONLY product 1s and 0s
@@ -196,9 +100,7 @@ item_sim_df = pd.DataFrame(
 
 print("Item Similarity Matrix created successfully.")
 
-
-import numpy as np
-
+# ========================= 3. Evaluate Recommender System =========================
 print("\n--- Evaluating Recommender System ---")
 
 # ========================= 1. Train/Test Split (Masking) ==========================
