@@ -1,12 +1,10 @@
-import os
+temp_df['DOB'] = pd.to_numeric(temp_df['DOB'], errors='coerce')
 
-target_files = [
-    r".\prime\data1.csv",
-    r".\prime\data2.csv"
-]
+temp_df.loc[temp_df['DOB'] < 0, 'DOB'] = np.nan
 
-target_files = [os.path.normpath(p) for p in target_files]
-
-for file in prime_files:
-    if os.path.normpath(file) in target_files:
-        print("MATCH:", file)
+temp_df['DOB'] = pd.to_datetime(
+    temp_df['DOB'],
+    origin='1899-12-30',
+    unit='D',
+    errors='coerce'
+)
