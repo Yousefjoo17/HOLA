@@ -1,42 +1,46 @@
 import glob
 import pandas as pd
+import os
 
 prime_files = sorted(glob.glob("prime/*.csv"))
 
-previous_rimnos = None
-
-for i, file in enumerate(prime_files):
-    print(f"\n================ FILE {i+1}: {file} ================\n")
-    
+def extract_rimnos(file):
     df = pd.read_csv(file, encoding='latin')
-    
-    # normalize column name if needed
     if "RIM_NO" in df.columns:
         df = df.rename(columns={"RIM_NO": "RIMNO"})
+    return set(df["RIMNO"].dropna().unique())
+
+for i in range(1, len(prime_files)):
     
-    current_rimnos = set(df["RIMNO"].dropna().unique())
+    prev_file = prime_files[i - 1]
+    curr_file = prime_files[i]
     
-    print(f"Total RIMNOs in file: {len(current_rimnos)}")
+    prev_rimnos = extract_rimnos(prev_file)
+    curr_rimnos = extract_rimnos(curr_file)
     
-    if previous_rimnos is not None:
+    # Try to create readable month label from filenames
+    prev_name = os.path.splitext(os.path.basename(prev_file))[0]
+    curr_name = os.path.splitext(os.path.basename(curr_file))[0]
+    
+    period_name = f"{prev_name}_TO_{curr_name}"
+    output_file = f"RIMNO_{period_name}.txt"
+    
+    missing_from_current = prev_rimnos - curr_rimnos
+    new_rimnos = curr_rimnos - prev_rimnos
+    
+    with open(output_file, "w", encoding="utf-8") as f:
         
-        # 1. Missing from previous month (expected but not found now)
-        missing_from_current = previous_rimnos - current_rimnos
+        f.write(f"================ {prev_name} → {curr_name} ================\n\n")
         
-        # 2. New RIMNOs appearing this month
-        new_rimnos = current_rimnos - previous_rimnos
+        f.write(f"Previous file RIMNO count: {len(prev_rimnos)}\n")
+        f.write(f"Current file RIMNO count: {len(curr_rimnos)}\n\n")
         
-        print(f"\n--- Missing RIMNOs from previous file ---")
-        print(f"Count: {len(missing_from_current)}")
-        if len(missing_from_current) > 0:
-            print(missing_from_current)
+        f.write("----------- Missing from current (potential churn) -----------\n")
+        f.write(f"Count: {len(missing_from_current)}\n")
+        f.write(str(missing_from_current) + "\n\n")
         
-        print(f"\n--- New RIMNOs in current file ---")
-        print(f"Count: {len(new_rimnos)}")
-        if len(new_rimnos) > 0:
-            print(new_rimnos)
-    
-    else:
-        print("First file baseline established.")
-    
-    previous_rimnos = current_rimnos
+        f.write("----------- New RIMNOs (new customers) -----------\n")
+        f.write(f"Count: {len(new_rimnos)}\n")
+        f.write(str(new_rimnos) + "\n")
+
+print("All month-to-month RIMNO reports exported.")
