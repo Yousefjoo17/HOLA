@@ -444,9 +444,21 @@ print("\n▶ Plotting MCC spend breakdown …")
 
 if "MCC" in transaction_df.columns and "BILLING AMT" in transaction_df.columns:
     mcc_totals = transaction_df.groupby("MCC")["BILLING AMT"].sum().sort_values(ascending=False).head(15)
+    
+    # Define your MCC mapping here (or import it if it's in another file)
+    MCC_MAPPING = {
+        # 5411: "Supermarkets",
+        # 5812: "Restaurants",
+    }
+    
     if not mcc_totals.empty:
         fig, ax = plt.subplots(figsize=(11, 6))
-        sns.barplot(x=mcc_totals.values, y=mcc_totals.index.astype(str), palette="mako", ax=ax)
+        
+        # Map the MCC codes to categories. If not found in mapping, default to the MCC number.
+        # Handle cases where mcc might be a float, int, or string
+        mcc_labels = [MCC_MAPPING.get(int(float(mcc)), str(mcc)) for mcc in mcc_totals.index]
+        
+        sns.barplot(x=mcc_totals.values, y=mcc_labels, palette="mako", ax=ax)
         ax.set_title("Top 15 Merchant Category Codes by Total Spend")
         ax.set_xlabel("Total Billing Amount (EGP)")
         save(fig, "09_mcc_spend.png")
