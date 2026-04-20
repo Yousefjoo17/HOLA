@@ -182,12 +182,15 @@ if dist_cols:
     axes = axes.flatten()
     for i, col in enumerate(dist_cols):
         data = prime_df[col].dropna()
+        # Clip at 99th percentile to remove extreme outliers for cleaner visuals
+        upper = data.quantile(0.99)
+        data = data[data <= upper]
         sns.histplot(data, bins=50, kde=True, ax=axes[i], color=PALETTE[i % len(PALETTE)])
         axes[i].set_title(col.replace("_", " ").title())
         axes[i].xaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x/1e3:.0f}K" if abs(x) >= 1000 else f"{x:.0f}"))
     for j in range(i + 1, len(axes)):
         axes[j].set_visible(False)
-    fig.suptitle("Distribution of Key Financial Variables", fontsize=15, y=1.01)
+    fig.suptitle("Distribution of Key Financial Variables (≤ 99th pctl)", fontsize=15, y=1.01)
     fig.tight_layout()
     save(fig, "03_numeric_distributions.png")
 
@@ -200,9 +203,13 @@ if txn_dist:
         axes = [axes]
     for ax, col in zip(axes, txn_dist):
         data = transaction_df[col].dropna()
+        # Clip at 99th percentile to remove extreme outliers for cleaner visuals
+        upper = data.quantile(0.99)
+        data = data[data <= upper]
         sns.histplot(data, bins=60, kde=True, ax=ax, color="#3498db")
         ax.set_title(f"Transaction {col}")
-    fig.suptitle("Transaction Amount Distributions (Before Outlier Cap)", fontsize=14, y=1.02)
+        ax.xaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x/1e3:.0f}K" if abs(x) >= 1000 else f"{x:.0f}"))
+    fig.suptitle("Transaction Amount Distributions (≤ 99th pctl)", fontsize=14, y=1.02)
     fig.tight_layout()
     save(fig, "03_transaction_amounts.png")
 
@@ -392,7 +399,14 @@ if "IS_FOREIGN_TRXN" in transaction_df.columns:
 print("\n▶ Plotting transaction time-series …")
 
 if "TRXN DATE" in transaction_df.columns:
-    ts = transaction_df.set_index("TRXN DATE").resample("M")
+    # Filter to only include data from Jan 2025 to March 2026
+    date_mask = (
+        (transaction_df["TRXN DATE"] >= "2025-01-01") &
+        (transaction_df["TRXN DATE"] <= "2026-03-31")
+    )
+    txn_filtered = transaction_df.loc[date_mask].copy()
+
+    ts = txn_filtered.set_index("TRXN DATE").resample("ME")
     monthly = pd.DataFrame({
         "TXN_COUNT": ts["BILLING AMT"].count(),
         "TOTAL_SPEND": ts["BILLING AMT"].sum()
@@ -402,16 +416,22 @@ if "TRXN DATE" in transaction_df.columns:
         fig, ax1 = plt.subplots(figsize=(14, 5))
         color1, color2 = "#2980b9", "#e74c3c"
         ax1.fill_between(monthly.index, monthly["TXN_COUNT"], alpha=0.25, color=color1)
-        ax1.plot(monthly.index, monthly["TXN_COUNT"], color=color1, linewidth=2, label="Txn Count")
+        ax1.plot(monthly.index, monthly["TXN_COUNT"], color=color1, linewidth=2, label="Txn Count", marker="o")
         ax1.set_ylabel("Transaction Count", color=color1)
         ax1.tick_params(axis="y", labelcolor=color1)
 
         ax2 = ax1.twinx()
-        ax2.plot(monthly.index, monthly["TOTAL_SPEND"], color=color2, linewidth=2, label="Total Spend")
+        ax2.plot(monthly.index, monthly["TOTAL_SPEND"], color=color2, linewidth=2, label="Total Spend", marker="s")
         ax2.set_ylabel("Total Spend (EGP)", color=color2)
         ax2.tick_params(axis="y", labelcolor=color2)
 
-        ax1.set_title("Monthly Transaction Volume & Spend Over Time")
+        # Format x-axis to show monthly labels nicely
+        import matplotlib.dates as mdates
+        ax1.xaxis.set_major_locator(mdates.MonthLocator())
+        ax1.xaxis.set_major_formatter(mdates.DateFormatter("%b %Y"))
+        plt.setp(ax1.xaxis.get_majorticklabels(), rotation=45, ha="right")
+
+        ax1.set_title("Monthly Transaction Volume & Spend (Jan 2025 – Mar 2026)")
         lines1, labels1 = ax1.get_legend_handles_labels()
         lines2, labels2 = ax2.get_legend_handles_labels()
         ax1.legend(lines1 + lines2, labels1 + labels2, loc="upper left")
