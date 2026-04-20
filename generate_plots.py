@@ -47,7 +47,7 @@ prime_flt = ["CREDIT_LIMIT","DELIQUENCY","JOINING_FEE","ANNUAL_FEE",
              "LEDGER_BALANCE","AVAILABLE_LIMIT","LAST_PAYMENT_AMOUNT",
              "OVERDUEAMOUNT","NO_OF_CYCLES","FIRST_REPLACED_CARD",
              "SECOND_REPLACED_CARD","THIRD_REPLACED_CARD","SETTLEMENT AMT"]
-prime_dat = ["CREATION_DATE","LAST_STAEMENT_DATE","LAST_PAYMENT_DATE",
+prime_dat = ["CREATION_DATE","LAST_STATEMENT_DATE","LAST_PAYMENT_DATE",
              "DOB","CLOSURE_DATE"]
 
 prime_frames = []
@@ -57,6 +57,7 @@ for f in glob.glob("prime/*.csv"):
         dtype={c: "string" for c in prime_str + prime_int + prime_flt},
         parse_dates=prime_dat
     ).rename(columns={"RIM_NO": "RIMNO", "NAME": "PRODUCT_NAME"})
+    tmp["DOB"] = pd.to_datetime(tmp["DOB"], errors='coerce')
     prime_frames.append(tmp)
 prime_df = pd.concat(prime_frames, ignore_index=True)
 
@@ -86,9 +87,9 @@ txn_flt = ["ORIG AMOUNT","EMBEDDED _FEE","BILLING AMT","SETTLEMENT AMT"]
 txn_dat = ["TRXN DATE","POST DATE"]
 
 txn_frames = []
-for f in glob.glob("transaction/*.csv"):
-    tmp = pd.read_csv(
-        f, encoding="latin",
+for f in glob.glob("transaction/*.xlsx"):
+    tmp = pd.read_excel(
+        f,
         dtype={c: "string" for c in txn_str + txn_int + txn_flt},
         parse_dates=txn_dat
     )
@@ -287,7 +288,7 @@ if all(c in prime_df.columns for c in rep_cols):
 
 # Foreign transaction flag
 if "TRXN COUNTRY" in transaction_df.columns:
-    transaction_df["IS_FOREIGN_TRXN"] = (transaction_df["TRXN COUNTRY"] != "EG").fillna(False).astype(int)
+    transaction_df["IS_FOREIGN_TRXN"] = (transaction_df["TRXN COUNTRY"] != "EGYPT").fillna(False).astype(int)
 
 # ── Age Group Bar ──
 if "AGE_GROUP" in prime_df.columns:
@@ -447,8 +448,22 @@ if "MCC" in transaction_df.columns and "BILLING AMT" in transaction_df.columns:
     
     # Define your MCC mapping here (or import it if it's in another file)
     MCC_MAPPING = {
-        # 5411: "Supermarkets",
-        # 5812: "Restaurants",
+        4814: "Telecommunication Services",
+        4900: "Utilities",
+        5065: "Electrical Parts & Equipment",
+        4121: "Taxicabs and Limousines",
+        5331: "Variety Stores",
+        5411: "Grocery Stores & Supermarkets",
+        5499: "Convenience Stores",
+        5541: "Service Stations / Gas",
+        5732: "Electronic Sales",
+        5814: "Fast Food Restaurants",
+        6011: "Automated Cash Disbursements",
+        7278: "Buying/Shopping Clubs",
+        8099: "Medical Services",
+        8299: "Educational Services",
+        9222: "Fines",
+        9399: "Government Services",
     }
     
     if not mcc_totals.empty:
