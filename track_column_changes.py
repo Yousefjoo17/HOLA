@@ -62,84 +62,93 @@ print(f"Found {len(prime_files)} files, ordered as:")
 for f in prime_files:
     print(f"  {get_month_label(f)}  ←  {f}")
 
-# ── 2. Load each file, tag with its month ────────────────────────────────
-frames = []
-for filepath in prime_files:
-    label = get_month_label(filepath)
-    df = pd.read_csv(filepath, encoding="latin", dtype=str)  # read everything as string for safe comparison
-    # Normalise the two known column-name variants
+# ── 2. Load a single file and normalise columns ─────────────────────────
+def load_month(filepath):
+    """Load a CSV, normalise known column variants, return DataFrame."""
+    df = pd.read_csv(filepath, encoding="latin", dtype=str)
     if "RIM_NO" in df.columns:
         df = df.rename(columns={"RIM_NO": "RIMNO"})
     if "NAME" in df.columns:
         df = df.rename(columns={"NAME": "PRODUCT_NAME"})
-    df["_MONTH"] = label
-    frames.append(df)
+    return df
 
-combined = pd.concat(frames, ignore_index=True)
-print(f"\nTotal rows loaded: {len(combined):,}")
-print(f"Unique (RIMNO, PRODUCT_NAME) pairs: "
-      f"{combined.groupby(['RIMNO','PRODUCT_NAME']).ngroups:,}")
-
-# ── 3. Identify the key and the "other" columns ─────────────────────────
 KEY_COLS = ["RIMNO", "PRODUCT_NAME"]
-SKIP_COLS = set(KEY_COLS) | {"_MONTH"}
-compare_cols = [c for c in combined.columns if c not in SKIP_COLS]
 
-print(f"\nColumns that will be compared month-over-month ({len(compare_cols)}):")
-for c in compare_cols:
-    print(f"  • {c}")
+# ── 3. Compare each consecutive pair of months ──────────────────────────
+all_change_records = []
+total_pairs_seen = set()
 
-# ── 4. Detect changes ───────────────────────────────────────────────────
-# For every (RIMNO, PRODUCT_NAME) group, sort by month and diff each
-# column against the previous month.
+for i in range(len(prime_files) - 1):
+    file_a, file_b = prime_files[i], prime_files[i + 1]
+    label_a, label_b = get_month_label(file_a), get_month_label(file_b)
 
-change_records = []
-
-grouped = combined.sort_values("_MONTH").groupby(KEY_COLS, sort=False)
-total_groups = len(grouped)
-print(f"\nAnalysing {total_groups:,} groups for changes …")
-
-for idx, ((rimno, prod), grp) in enumerate(grouped, 1):
-    if idx % 5000 == 0 or idx == total_groups:
-        print(f"  progress: {idx:,} / {total_groups:,}")
-
-    if len(grp) < 2:
-        continue  # need at least 2 months to compare
-
-    grp = grp.sort_values("_MONTH").reset_index(drop=True)
-    months = grp["_MONTH"].tolist()
-
-    for i in range(1, len(grp)):
-        prev_month = months[i - 1]
-        curr_month = months[i]
-        for col in compare_cols:
-            old_val = grp.at[i - 1, col]
-            new_val = grp.at[i, col]
-            # Treat NaN == NaN as "no change"
-            if pd.isna(old_val) and pd.isna(new_val):
-                continue
-            if old_val != new_val:
-                change_records.append({
-                    "RIMNO": rimno,
-                    "PRODUCT_NAME": prod,
-                    "COLUMN": col,
-                    "FROM_MONTH": prev_month,
-                    "TO_MONTH": curr_month,
-                    "OLD_VALUE": old_val,
-                    "NEW_VALUE": new_val,
-                })
-
-changes_df = pd.DataFrame(change_records)
-
-# ── 5. Report ────────────────────────────────────────────────────────────
-if changes_df.empty:
-    print("\nNo column changes detected across months for any (RIMNO, PRODUCT_NAME) pair.")
-else:
     print(f"\n{'='*70}")
-    print(f"TOTAL INDIVIDUAL CHANGES DETECTED: {len(changes_df):,}")
+    print(f"Comparing  {label_a}  -->  {label_b}")
     print(f"{'='*70}")
 
-    # 5a. Which columns change the most?
+    df_a = load_month(file_a)
+    df_b = load_month(file_b)
+
+    # Columns to compare = intersection of both files minus the keys
+    common_cols = [c for c in df_a.columns if c in df_b.columns and c not in KEY_COLS]
+    print(f"  Common columns to compare: {len(common_cols)}")
+
+    # Inner merge on the key so we only compare rows that exist in both months
+    merged = df_a[KEY_COLS + common_cols].merge(
+        df_b[KEY_COLS + common_cols],
+        on=KEY_COLS,
+        suffixes=("_OLD", "_NEW"),
+        how="inner",
+    )
+    print(f"  Matched (RIMNO, PRODUCT_NAME) pairs: {len(merged):,}")
+
+    change_records = []
+    for col in common_cols:
+        old_col = f"{col}_OLD"
+        new_col = f"{col}_NEW"
+
+        old_vals = merged[old_col]
+        new_vals = merged[new_col]
+
+        # A value changed if they differ AND it's not NaN==NaN
+        both_nan = old_vals.isna() & new_vals.isna()
+        changed = (old_vals != new_vals) & ~both_nan
+
+        if changed.any():
+            diff_rows = merged.loc[changed, KEY_COLS + [old_col, new_col]].copy()
+            diff_rows = diff_rows.rename(columns={old_col: "OLD_VALUE", new_col: "NEW_VALUE"})
+            diff_rows["COLUMN"] = col
+            diff_rows["FROM_MONTH"] = label_a
+            diff_rows["TO_MONTH"] = label_b
+            change_records.append(diff_rows)
+
+    if change_records:
+        transition_df = pd.concat(change_records, ignore_index=True)
+        all_change_records.append(transition_df)
+
+        # Per-column summary for this transition
+        col_counts = transition_df["COLUMN"].value_counts()
+        print(f"\n  Columns that changed ({label_a} -> {label_b}):")
+        for col_name, count in col_counts.items():
+            pct = count / len(merged) * 100
+            print(f"    {col_name:30s}  {count:>7,} rows changed  ({pct:.1f}%)")
+    else:
+        print(f"  No changes detected between {label_a} and {label_b}.")
+
+    total_pairs_seen.update(merged[KEY_COLS].apply(tuple, axis=1).tolist())
+
+# ── 4. Aggregate report across all transitions ──────────────────────────
+if all_change_records:
+    changes_df = pd.concat(all_change_records, ignore_index=True)
+    total_tracked = len(total_pairs_seen)
+
+    print(f"\n{'='*70}")
+    print(f"OVERALL SUMMARY")
+    print(f"{'='*70}")
+    print(f"Total unique (RIMNO, PRODUCT_NAME) pairs tracked: {total_tracked:,}")
+    print(f"Total individual field changes detected:          {len(changes_df):,}")
+
+    # Which columns change the most across all transitions?
     col_summary = (
         changes_df
         .groupby("COLUMN")
@@ -149,26 +158,14 @@ else:
         )
         .sort_values("total_changes", ascending=False)
     )
-    # What % of all tracked pairs are affected
     col_summary["pct_pairs_affected"] = (
-        (col_summary["unique_pairs_affected"] / total_groups * 100).round(2)
+        (col_summary["unique_pairs_affected"] / total_tracked * 100).round(2)
     )
 
-    print("\n── Column-Level Summary (sorted by frequency) ──")
+    print("\n-- Column-Level Summary (sorted by frequency) --")
     print(col_summary.to_string())
 
-    # 5b. Month-transition breakdown
-    transition_summary = (
-        changes_df
-        .groupby(["FROM_MONTH", "TO_MONTH", "COLUMN"])
-        .size()
-        .reset_index(name="change_count")
-        .sort_values(["FROM_MONTH", "change_count"], ascending=[True, False])
-    )
-    print("\n── Changes by Month Transition ──")
-    print(transition_summary.to_string(index=False))
-
-    # 5c. Export detailed results
+    # Export
     detail_path = "column_changes_report.csv"
     summary_path = "column_changes_summary.csv"
 
@@ -177,5 +174,7 @@ else:
 
     print(f"\nDetailed change log  ->  {detail_path}")
     print(f"Column-level summary ->  {summary_path}")
+else:
+    print("\nNo changes detected across any month transition.")
 
 print("\nDone.")
