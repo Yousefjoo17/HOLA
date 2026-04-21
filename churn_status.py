@@ -1,20 +1,26 @@
 """
 churn_labeller.py
 -----------------
-Adds a CHURN column to the latest prime snapshot.
+Adds CHURN and CHURN_TYPE columns to the latest prime snapshot.
 
-Logic
------
-1.  Sort all prime CSVs chronologically by filename; the last one is
-    "latest_prime", the rest are "historical".
-2.  Collect every RIMNO that has ever appeared in the historical files.
-3.  For each historical RIMNO, look it up in latest_prime:
-      - RIMNO exists   → CHURN = 1 if *every* row for that RIMNO has a
-                         status in CHURN_STATUSES, else 0.
-      - RIMNO missing  → append a stub row with CHURN = 1.
-4.  RIMNOs that only appear in latest_prime (never seen before) get
-    CHURN = 0 by default.
-5.  Writes the result to OUTPUT_PATH.
+CHURN_TYPE values
+-----------------
+  always_churned  – RIMNO had a churn status in EVERY historical month AND
+                    is still churned in the latest file.  These customers
+                    were never really active.
+  became_churned  – RIMNO was active (non-churn status) in at least ONE
+                    historical month but is now fully churned in the latest
+                    file.  These are "true" churn candidates.
+  disappeared     – RIMNO appeared in historical files but is completely
+                    absent from the latest file (stub row appended).
+  new_customer    – RIMNO appears only in the latest file; no history.
+  not_churned     – RIMNO exists in history and latest, and at least one
+                    row in the latest file has a non-churn status.
+
+CHURN column
+------------
+  1 for always_churned, became_churned, and disappeared.
+  0 for not_churned and new_customer.
 
 Adjust CHURN_STATUSES and PRIME_DATA_DIR as needed.
 """
@@ -53,6 +59,7 @@ CHURN_STATUSES = {
 CUSTOMER_ID_COL = "RIMNO"          # after rename from RIM_NO
 STATUS_COL      = "STATUS"
 CHURN_COL       = "CHURN"
+CHURN_TYPE_COL  = "CHURN_TYPE"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -138,63 +145,106 @@ def label_churn():
     print(f"Historical files    : {[f'{os.path.basename(f)} ({get_month_label(f)})' for f in history_files]}")
     print()
 
-    # 2. Collect every RIMNO seen in historical files
+    # 2. Load historical files and track per-RIMNO status across months
+    #    For each RIMNO we record:
+    #      - was it ever active (non-churn status) in any historical month?
+    #      - which months did it appear in?
     historical_rimnos: set[str] = set()
+    ever_active_rimnos: set[str] = set()   # had a non-churn status at least once
+
     for f in history_files:
         df = _load_csv(f)
-        if CUSTOMER_ID_COL in df.columns:
-            historical_rimnos.update(df[CUSTOMER_ID_COL].dropna().unique())
+        if CUSTOMER_ID_COL not in df.columns:
+            continue
+        rimnos_in_file = set(df[CUSTOMER_ID_COL].dropna().unique())
+        historical_rimnos.update(rimnos_in_file)
 
-    print(f"Unique RIMNOs in historical files: {len(historical_rimnos):,}")
+        # Check which RIMNOs in this file have at least one non-churn row
+        if STATUS_COL in df.columns:
+            active_mask = ~df[STATUS_COL].map(_is_churned_status)
+            active_in_file = set(
+                df.loc[active_mask, CUSTOMER_ID_COL].dropna().unique()
+            )
+            ever_active_rimnos.update(active_in_file)
+
+    # RIMNOs that were ALWAYS churned in every historical file they appeared in
+    always_churned_historically = historical_rimnos - ever_active_rimnos
+
+    print(f"Unique RIMNOs in historical files : {len(historical_rimnos):,}")
+    print(f"  Ever active in history          : {len(ever_active_rimnos):,}")
+    print(f"  Always churned in history       : {len(always_churned_historically):,}")
 
     # 3. Load latest prime
     latest = _load_csv(latest_file)
-    print(f"Rows in latest prime             : {len(latest):,}")
+    print(f"Rows in latest prime              : {len(latest):,}")
 
-    # Initialise CHURN column to 0 for everyone already in latest_prime
-    latest[CHURN_COL] = 0
+    # Initialise columns
+    latest[CHURN_COL]      = 0
+    latest[CHURN_TYPE_COL] = "not_churned"
 
-    # 4. For each historical RIMNO, decide CHURN
+    # 4. For each historical RIMNO, decide CHURN and CHURN_TYPE
     rimnos_in_latest = set(latest[CUSTOMER_ID_COL].dropna().unique())
+    rimnos_in_both   = historical_rimnos & rimnos_in_latest
 
-    # 4a. RIMNOs that exist in latest_prime
-    rimnos_in_both = historical_rimnos & rimnos_in_latest
-
-    # Vectorised: for each RIMNO in latest, flag rows that belong to
-    # customers whose EVERY status is a churn status.
-    # Group by RIMNO, check if all statuses are churn statuses.
+    # 4a. Determine which RIMNOs are fully churned in the latest file
     if STATUS_COL in latest.columns:
         churn_mask_per_rimno = (
             latest[latest[CUSTOMER_ID_COL].isin(rimnos_in_both)]
             .groupby(CUSTOMER_ID_COL)[STATUS_COL]
             .apply(lambda statuses: statuses.map(_is_churned_status).all())
         )
-        # churn_mask_per_rimno is a Series: RIMNO -> True/False
-        churned_rimnos = set(
+        churned_in_latest = set(
             churn_mask_per_rimno[churn_mask_per_rimno].index.tolist()
         )
     else:
         print(f"WARNING: '{STATUS_COL}' column not found in latest prime — "
               "all existing customers set to CHURN=0.")
-        churned_rimnos = set()
+        churned_in_latest = set()
 
-    # Apply CHURN=1 to rows in latest whose RIMNO is fully churned
-    latest.loc[latest[CUSTOMER_ID_COL].isin(churned_rimnos), CHURN_COL] = 1
+    # 4b. Split churned RIMNOs into "always_churned" vs "became_churned"
+    always_churned  = churned_in_latest & always_churned_historically
+    became_churned  = churned_in_latest - always_churned_historically
 
-    print(f"  Historical RIMNOs found in latest   : {len(rimnos_in_both):,}")
-    print(f"  Of those, all rows churned (CHURN=1): {len(churned_rimnos):,}")
+    # Apply labels
+    latest.loc[
+        latest[CUSTOMER_ID_COL].isin(always_churned), CHURN_COL
+    ] = 1
+    latest.loc[
+        latest[CUSTOMER_ID_COL].isin(always_churned), CHURN_TYPE_COL
+    ] = "always_churned"
 
-    # 4b. RIMNOs that are in historical files but MISSING from latest_prime
+    latest.loc[
+        latest[CUSTOMER_ID_COL].isin(became_churned), CHURN_COL
+    ] = 1
+    latest.loc[
+        latest[CUSTOMER_ID_COL].isin(became_churned), CHURN_TYPE_COL
+    ] = "became_churned"
+
+    # 4c. RIMNOs only in latest (no history) → new_customer
+    rimnos_only_in_latest = rimnos_in_latest - historical_rimnos
+    latest.loc[
+        latest[CUSTOMER_ID_COL].isin(rimnos_only_in_latest), CHURN_TYPE_COL
+    ] = "new_customer"
+
+    print()
+    print(f"  Historical RIMNOs found in latest    : {len(rimnos_in_both):,}")
+    print(f"    → always_churned (churned every month): {len(always_churned):,}")
+    print(f"    → became_churned (was active, now gone): {len(became_churned):,}")
+    print(f"    → not_churned (still active)           : {len(rimnos_in_both) - len(churned_in_latest):,}")
+    print(f"  New customers (no history)             : {len(rimnos_only_in_latest):,}")
+
+    # 4d. RIMNOs that are in historical files but MISSING from latest_prime
     rimnos_missing = historical_rimnos - rimnos_in_latest
-    print(f"  Historical RIMNOs missing from latest: {len(rimnos_missing):,}")
+    print(f"  Disappeared (missing from latest)     : {len(rimnos_missing):,}")
 
     if rimnos_missing:
         # Build stub rows: one row per missing RIMNO, all columns NaN
-        # except RIMNO and CHURN.
+        # except RIMNO, CHURN, and CHURN_TYPE.
         stub_rows = pd.DataFrame(
             {CUSTOMER_ID_COL: list(rimnos_missing)}
         )
-        stub_rows[CHURN_COL] = 1
+        stub_rows[CHURN_COL]      = 1
+        stub_rows[CHURN_TYPE_COL] = "disappeared"
 
         # Add any columns present in latest but absent in stub (fill NaN)
         for col in latest.columns:
@@ -205,19 +255,28 @@ def label_churn():
         stub_rows = stub_rows[latest.columns]
 
         latest = pd.concat([latest, stub_rows], ignore_index=True)
-        print(f"  Stub rows appended for missing RIMNOs: {len(stub_rows):,}")
+        print(f"  Stub rows appended for missing RIMNOs : {len(stub_rows):,}")
 
     # 5. Summary
-    total_churn    = int(latest[CHURN_COL].sum())
-    total_rows     = len(latest)
-    total_non_churn = total_rows - total_churn
     print()
-    print("=" * 50)
+    print("=" * 60)
     print("CHURN SUMMARY")
-    print("=" * 50)
-    print(f"  Total rows  : {total_rows:,}")
-    print(f"  CHURN = 1   : {total_churn:,}  ({total_churn / total_rows * 100:.1f}%)")
-    print(f"  CHURN = 0   : {total_non_churn:,}  ({total_non_churn / total_rows * 100:.1f}%)")
+    print("=" * 60)
+
+    total_rows = len(latest)
+    type_counts = latest[CHURN_TYPE_COL].value_counts()
+    for ctype in ["always_churned", "became_churned", "disappeared",
+                  "not_churned", "new_customer"]:
+        cnt = type_counts.get(ctype, 0)
+        pct = cnt / total_rows * 100 if total_rows else 0
+        churn_flag = "CHURN=1" if ctype in ("always_churned", "became_churned", "disappeared") else "CHURN=0"
+        print(f"  {ctype:<20s}: {cnt:>8,}  ({pct:5.1f}%)  [{churn_flag}]")
+
+    total_churn = int(latest[CHURN_COL].sum())
+    print(f"  {'':20s}  {'':>8s}")
+    print(f"  {'TOTAL':20s}: {total_rows:>8,}")
+    print(f"  {'CHURN = 1':20s}: {total_churn:>8,}  ({total_churn / total_rows * 100:.1f}%)")
+    print(f"  {'CHURN = 0':20s}: {total_rows - total_churn:>8,}  ({(total_rows - total_churn) / total_rows * 100:.1f}%)")
     print()
 
     # 6. Write output
