@@ -40,11 +40,16 @@ def extract_rimnos(file):
 files = glob.glob("prime/*.csv")
 files = sorted(files, key=get_month_year)
 
+rimnos_list = []
 # (Optional sanity check print order)
 print("\n=== Correct File Order ===")
 for f in files:
     print(os.path.basename(f))
 
+
+print("\n=== Loading RIMNOs ===")
+for f in files:
+    rimnos_list.append(extract_rimnos(f))
 
 # ================= MONTH TO MONTH COMPARISON =================
 for i in range(1, len(files)):
@@ -52,11 +57,11 @@ for i in range(1, len(files)):
     prev_file = files[i - 1]
     curr_file = files[i]
     
-    prev_rimnos = extract_rimnos(prev_file)
-    curr_rimnos = extract_rimnos(curr_file)
+    prev_rimnos = rimnos_list[i - 1]
+    curr_rimnos = rimnos_list[i]
     
-    prev_label = os.path.basename(prev_file).replace(".csv", "")
-    curr_label = os.path.basename(curr_file).replace(".csv", "")
+    prev_label = f"{prev_file[-12:-4]}"
+    curr_label = f"{curr_file[-12:-4]}"
     
     missing = prev_rimnos - curr_rimnos
     new = curr_rimnos - prev_rimnos
@@ -70,12 +75,22 @@ for i in range(1, len(files)):
         f.write(f"Previous RIMNOs: {len(prev_rimnos)}\n")
         f.write(f"Current RIMNOs: {len(curr_rimnos)}\n\n")
         
-        f.write("----------- MISSING (churn candidates) -----------\n")
-        f.write(f"Count: {len(missing)}\n")
-        f.write(str(missing) + "\n\n")
-        
         f.write("----------- NEW (new customers) -----------\n")
         f.write(f"Count: {len(new)}\n")
         f.write(str(new) + "\n")
+
+        f.write("----------- MISSING (churn candidates) -----------\n")
+        f.write(f"Count: {len(missing)}\n")
+        f.write(str(missing) + "\n\n")
+
+        for j in range(len(rimnos_list)):
+            if j == i - 1 or j == i:
+                continue
+
+            intersection = missing & rimnos_list[j]
+            if len(intersection) != 0:
+                f.write(f"In {files[j][-12:-4]}: {len(intersection)} of the missing RIMNOs exist\n")
+                f.write(str(intersection) + "\n\n")
+
 
 print("\nDone: Fully chronological RIMNO audit generated.")
