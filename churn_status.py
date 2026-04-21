@@ -8,9 +8,13 @@ CHURN_TYPE values
   always_churned  – RIMNO had a churn status in EVERY historical month AND
                     is still churned in the latest file.  These customers
                     were never really active.
-  became_churned  – RIMNO was active (non-churn status) in at least ONE
-                    historical month but is now fully churned in the latest
-                    file.  These are "true" churn candidates.
+  became_churned_recent – RIMNO was active (non-churn status) in at least
+                     ONE of the last two months before the latest file AND
+                     is now fully churned in the latest file.  High-confidence
+                     recent churn.
+  became_churned_old    – RIMNO was active at some point in history but was
+                     NOT active in either of the last two months.  The churn
+                     happened further back; flag for review.
   disappeared     – RIMNO appeared in historical files but is completely
                     absent from the latest file (stub row appended).
   new_customer    – RIMNO appears only in the latest file; no history.
@@ -19,7 +23,8 @@ CHURN_TYPE values
 
 CHURN column
 ------------
-  1 for always_churned, became_churned, and disappeared.
+  1 for always_churned, became_churned_recent, became_churned_old,
+    and disappeared.
   0 for not_churned and new_customer.
 
 Adjust CHURN_STATUSES and PRIME_DATA_DIR as needed.
@@ -148,9 +153,22 @@ def label_churn():
     # 2. Load historical files and track per-RIMNO status across months
     #    For each RIMNO we record:
     #      - was it ever active (non-churn status) in any historical month?
+    #      - was it active in the last month or the month before that?
     #      - which months did it appear in?
     historical_rimnos: set[str] = set()
     ever_active_rimnos: set[str] = set()   # had a non-churn status at least once
+
+    # Identify the last two history files (the month right before latest,
+    # and the month before that) for the extra-cautious recency check.
+    last_month_file       = history_files[-1] if len(history_files) >= 1 else None
+    month_before_file     = history_files[-2] if len(history_files) >= 2 else None
+    recent_active_rimnos: set[str] = set()  # active in last month or month-before
+
+    if last_month_file:
+        print(f"Last month file     : {os.path.basename(last_month_file)} ({get_month_label(last_month_file)})")
+    if month_before_file:
+        print(f"Month-before file   : {os.path.basename(month_before_file)} ({get_month_label(month_before_file)})")
+    print()
 
     for f in history_files:
         df = _load_csv(f)
@@ -167,11 +185,16 @@ def label_churn():
             )
             ever_active_rimnos.update(active_in_file)
 
+            # Extra-cautious: track activity in the two most recent months
+            if f in (last_month_file, month_before_file):
+                recent_active_rimnos.update(active_in_file)
+
     # RIMNOs that were ALWAYS churned in every historical file they appeared in
     always_churned_historically = historical_rimnos - ever_active_rimnos
 
     print(f"Unique RIMNOs in historical files : {len(historical_rimnos):,}")
     print(f"  Ever active in history          : {len(ever_active_rimnos):,}")
+    print(f"  Active in last 2 months         : {len(recent_active_rimnos):,}")
     print(f"  Always churned in history       : {len(always_churned_historically):,}")
 
     # 3. Load latest prime
@@ -202,8 +225,13 @@ def label_churn():
         churned_in_latest = set()
 
     # 4b. Split churned RIMNOs into "always_churned" vs "became_churned"
-    always_churned  = churned_in_latest & always_churned_historically
-    became_churned  = churned_in_latest - always_churned_historically
+    #      For became_churned, further split by recency:
+    #        - became_churned_recent: was active in the last month or month before
+    #        - became_churned_old:    was active historically but NOT recently
+    always_churned        = churned_in_latest & always_churned_historically
+    became_churned_all    = churned_in_latest - always_churned_historically
+    became_churned_recent = became_churned_all & recent_active_rimnos
+    became_churned_old    = became_churned_all - recent_active_rimnos
 
     # Apply labels
     latest.loc[
@@ -214,11 +242,18 @@ def label_churn():
     ] = "always_churned"
 
     latest.loc[
-        latest[CUSTOMER_ID_COL].isin(became_churned), CHURN_COL
+        latest[CUSTOMER_ID_COL].isin(became_churned_recent), CHURN_COL
     ] = 1
     latest.loc[
-        latest[CUSTOMER_ID_COL].isin(became_churned), CHURN_TYPE_COL
-    ] = "became_churned"
+        latest[CUSTOMER_ID_COL].isin(became_churned_recent), CHURN_TYPE_COL
+    ] = "became_churned_recent"
+
+    latest.loc[
+        latest[CUSTOMER_ID_COL].isin(became_churned_old), CHURN_COL
+    ] = 1
+    latest.loc[
+        latest[CUSTOMER_ID_COL].isin(became_churned_old), CHURN_TYPE_COL
+    ] = "became_churned_old"
 
     # 4c. RIMNOs only in latest (no history) → new_customer
     rimnos_only_in_latest = rimnos_in_latest - historical_rimnos
@@ -228,10 +263,11 @@ def label_churn():
 
     print()
     print(f"  Historical RIMNOs found in latest    : {len(rimnos_in_both):,}")
-    print(f"    → always_churned (churned every month): {len(always_churned):,}")
-    print(f"    → became_churned (was active, now gone): {len(became_churned):,}")
-    print(f"    → not_churned (still active)           : {len(rimnos_in_both) - len(churned_in_latest):,}")
-    print(f"  New customers (no history)             : {len(rimnos_only_in_latest):,}")
+    print(f"    → always_churned (churned every month)      : {len(always_churned):,}")
+    print(f"    → became_churned_recent (active last 2 mo)  : {len(became_churned_recent):,}")
+    print(f"    → became_churned_old (active only earlier)   : {len(became_churned_old):,}")
+    print(f"    → not_churned (still active)                : {len(rimnos_in_both) - len(churned_in_latest):,}")
+    print(f"  New customers (no history)                    : {len(rimnos_only_in_latest):,}")
 
     # 4d. RIMNOs that are in historical files but MISSING from latest_prime
     rimnos_missing = historical_rimnos - rimnos_in_latest
@@ -265,12 +301,12 @@ def label_churn():
 
     total_rows = len(latest)
     type_counts = latest[CHURN_TYPE_COL].value_counts()
-    for ctype in ["always_churned", "became_churned", "disappeared",
-                  "not_churned", "new_customer"]:
+    for ctype in ["always_churned", "became_churned_recent", "became_churned_old",
+                  "disappeared", "not_churned", "new_customer"]:
         cnt = type_counts.get(ctype, 0)
         pct = cnt / total_rows * 100 if total_rows else 0
-        churn_flag = "CHURN=1" if ctype in ("always_churned", "became_churned", "disappeared") else "CHURN=0"
-        print(f"  {ctype:<20s}: {cnt:>8,}  ({pct:5.1f}%)  [{churn_flag}]")
+        churn_flag = "CHURN=1" if ctype in ("always_churned", "became_churned_recent", "became_churned_old", "disappeared") else "CHURN=0"
+        print(f"  {ctype:<25s}: {cnt:>8,}  ({pct:5.1f}%)  [{churn_flag}]")
 
     total_churn = int(latest[CHURN_COL].sum())
     print(f"  {'':20s}  {'':>8s}")
