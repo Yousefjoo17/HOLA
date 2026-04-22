@@ -254,27 +254,6 @@ cols_to_ohe = ['GENDER', 'AGE_GROUP', 'LIMIT_BAND', 'CUSTOMER_TYPE', 'ACTIVATED'
 prime_df = pd.get_dummies(prime_df, columns=cols_to_ohe, drop_first=True)
 
 
-# ========================= Data Scaling ==========================
-print("\n--- Applying Data Scaling ---")
-float_cols_to_scale = prime_df.select_dtypes(include=['float64', 'float32']).columns.tolist()
-
-# 2. Initialize the Scaler
-# StandardScaler transforms data to have a mean of 0 and standard deviation of 1.
-scaler = StandardScaler()
-
-if float_cols_to_scale:
-    print(f"Scaling the following {len(float_cols_to_scale)} float columns:")
-    for col in float_cols_to_scale:
-        print(f" - {col}")
-        
-    prime_df[float_cols_to_scale] = scaler.fit_transform(prime_df[float_cols_to_scale])
-    
-    print("\nScaling complete. Statistical summary of a few scaled columns:")
-    print(prime_df[float_cols_to_scale[:5]].describe().round(3))
-else:
-    print("No float columns found to scale.")
-    
-
 # ========================= Final NaN Handling ==========================
 print("\n--- Final Check for NaN Values ---")
 
