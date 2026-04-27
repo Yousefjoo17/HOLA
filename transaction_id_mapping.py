@@ -90,6 +90,17 @@ if not transaction_files:
 print(f"\nFound {len(transaction_files)} transaction file(s).\n")
 
 
+# ========================= Product Name Mapping (Transaction -> Prime) =========================
+# Fill in actual transaction product names as keys and matching prime product names as values
+product_name_mapping = {
+    'oldvalue1': 'newvalue1',
+    'oldvalue2': 'newvalue2',
+    'oldvalue3': 'newvalue3',
+    'oldvalue4': 'newvalue4',
+    'oldvalue5': 'newvalue5',
+}
+
+
 # ========================= Process Each Transaction File =========================
 for file in transaction_files:
     file_basename = os.path.splitext(os.path.basename(file))[0]
@@ -103,6 +114,9 @@ for file in transaction_files:
         dtype={col: "string" for col in transaction_string_cols + transaction_int_cols + transaction_float_cols},
         parse_dates=transaction_date_cols
     ).rename(columns={'DESCRIPTION': 'PRODUCT_NAME'})
+
+    # --- Apply product name mapping to match prime naming ---
+    df['PRODUCT_NAME'] = df['PRODUCT_NAME'].replace(product_name_mapping)
 
     print(f"  Rows loaded: {len(df)}")
 
