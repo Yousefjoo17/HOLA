@@ -70,8 +70,64 @@ if not prime_files:
 
 print(f"Found {len(prime_files)} prime file(s).\n")
 
+# Status codes that indicate an inactive / closed / blocked card
+inactive_statuses = [
+    'CLSB',   # closed by bank
+    'CLSC',   # closed by customer
+    'LOST',   # lost card
+    'WROF',   # write off status
+    'CNCD',   # card not collected by DSU
+    'SUSP',   # profit suspended
+    'FRAD',   # pick up card special fraud
+    'CLSD',   # closed
+    'BLOK',   # blok card
+    'NOAU',   # no authorization
+    'EXMU',   # expired murabha
+    'PICK',   # pick up card
+    'BLCK',   # blocked status
+    'STLC',   # stolen card
+    'OFBL',   # offline pin block
+    'ONBL',   # online pin block
+    'FREZ',   # freeze card
+    'EXPD',   # expired
+    'EXPC',   # expired card
+]
 
-# ========================= Process Each File Separately =========================
+
+# ========================= PASS 1: Build Global CUSTOMER_ID Mapping =========================
+print("PASS 1: Scanning all files to build a global CUSTOMER_ID mapping...\n")
+
+all_pairs = []
+
+for file in prime_files:
+    print(f"  Scanning: {file}")
+    temp_df = pd.read_csv(
+        file,
+        encoding='latin',
+        usecols=['RIM_NO', 'RIMNO', 'DOB'],  # only need the key columns
+        dtype='string'
+    )
+
+    # Standardize column name
+    if 'RIM_NO' in temp_df.columns:
+        temp_df = temp_df.rename(columns={'RIM_NO': 'RIMNO'})
+
+    temp_df['RIMNO'] = temp_df['RIMNO'].str.strip()
+    temp_df['DOB'] = pd.to_datetime(temp_df['DOB'], errors='coerce')
+
+    all_pairs.append(temp_df[['RIMNO', 'DOB']])
+
+# Combine and deduplicate across ALL files
+global_pairs = pd.concat(all_pairs, ignore_index=True).drop_duplicates().reset_index(drop=True)
+global_pairs['CUSTOMER_ID'] = range(1, len(global_pairs) + 1)
+
+print(f"\n  Global unique (RIMNO, DOB) pairs: {len(global_pairs)}")
+print(f"  CUSTOMER_ID range: 1 - {len(global_pairs)}\n")
+
+
+# ========================= PASS 2: Process Each File Separately =========================
+print("PASS 2: Processing each file with the global CUSTOMER_ID mapping...\n")
+
 for file in prime_files:
     file_basename = os.path.splitext(os.path.basename(file))[0]
     print(f"{'='*60}")
@@ -103,40 +159,16 @@ for file in prime_files:
 
     # Clean up ACTIVATED and STATUS for reliable splitting
     df['ACTIVATED'] = df['ACTIVATED'].astype("string").str.strip().str.upper()
-    df['STATUS'] = df['STATUS'].astype("string").str.strip().str.upper()
+    df['STATUS'] = df['STATUS'].astype("string").str.strip().str.lower()
 
-    # Status codes that indicate an inactive / closed / blocked card
-    inactive_statuses = [
-        'CLSB',   # closed by bank
-        'CLSC',   # closed by customer
-        'LOST',   # lost card
-        'WROF',   # write off status
-        'CNCD',   # card not collected by DSU
-        'SUSP',   # profit suspended
-        'FRAD',   # pick up card special fraud
-        'CLSD',   # closed
-        'BLOK',   # blok card
-        'NOAU',   # no authorization
-        'EXMU',   # expired murabha
-        'PICK',   # pick up card
-        'BLCK',   # blocked status
-        'STLC',   # stolen card
-        'OFBL',   # offline pin block
-        'ONBL',   # online pin block
-        'FREZ',   # freeze card
-        'EXPD',   # expired
-        'EXPC',   # expired card
-    ]
+    # --- Assign CUSTOMER_ID from the global mapping ---
+    # Prepare RIMNO to match the format used in the global mapping
+    df['RIMNO'] = df['RIMNO'].astype("string").str.strip()
+    df = df.merge(global_pairs, on=['RIMNO', 'DOB'], how='left')
 
-    # --- Assign CUSTOMER_ID based on unique (RIMNO, DOB) pairs in THIS file ---
-    unique_pairs = df[['RIMNO', 'DOB']].drop_duplicates().reset_index(drop=True)
-    unique_pairs['CUSTOMER_ID'] = range(1, len(unique_pairs) + 1)
-
-    print(f"  Unique (RIMNO, DOB) pairs: {len(unique_pairs)}")
-
-    df = df.merge(unique_pairs, on=['RIMNO', 'DOB'], how='left')
-
+    assigned = df['CUSTOMER_ID'].notna().sum()
     unmatched = df['CUSTOMER_ID'].isna().sum()
+    print(f"\n  CUSTOMER_ID assigned: {assigned} rows")
     if unmatched > 0:
         print(f"  WARNING: {unmatched} rows could not be assigned a CUSTOMER_ID (missing RIMNO or DOB).")
 
@@ -157,6 +189,44 @@ for file in prime_files:
         print(f"    ACTIVATED values: {other_df['ACTIVATED'].unique().tolist()}")
         print(f"    STATUS values:    {other_df['STATUS'].unique().tolist()}")
 
+    # --- Detect relatives: same (RIMNO, PRODUCT_NAME) but different CUSTOMER_ID ---
+    # For each (RIMNO, PRODUCT_NAME) group, keep only the row(s) with the oldest DOB
+    # and move the rest to active_relatives
+    dup_check = active_df.groupby(['RIMNO', 'PRODUCT_NAME'])['CUSTOMER_ID'].nunique()
+    dup_groups = dup_check[dup_check > 1].index  # (RIMNO, PRODUCT_NAME) pairs with >1 CUSTOMER_ID
+
+    if len(dup_groups) > 0:
+        print(f"\n  Found {len(dup_groups)} (RIMNO, PRODUCT_NAME) pair(s) with multiple CUSTOMER_IDs.")
+
+        # For each duplicated group, find the oldest DOB (min DOB = oldest person)
+        oldest_dob = (
+            active_df[active_df.set_index(['RIMNO', 'PRODUCT_NAME']).index.isin(dup_groups)]
+            .groupby(['RIMNO', 'PRODUCT_NAME'])['DOB']
+            .min()
+            .reset_index()
+            .rename(columns={'DOB': 'OLDEST_DOB'})
+        )
+
+        # Merge to tag each row
+        active_df = active_df.merge(oldest_dob, on=['RIMNO', 'PRODUCT_NAME'], how='left')
+
+        # Rows in duplicated groups whose DOB is NOT the oldest -> relatives
+        is_dup_group = active_df.set_index(['RIMNO', 'PRODUCT_NAME']).index.isin(dup_groups)
+        is_not_oldest = active_df['DOB'] != active_df['OLDEST_DOB']
+
+        relatives_df = active_df[is_dup_group & is_not_oldest].copy()
+        active_df = active_df[~(is_dup_group & is_not_oldest)].copy()
+
+        # Clean up helper column
+        active_df = active_df.drop(columns=['OLDEST_DOB'])
+        relatives_df = relatives_df.drop(columns=['OLDEST_DOB'])
+
+        print(f"  Moved {len(relatives_df)} row(s) to active_relatives.")
+        print(f"  Active after dedup: {len(active_df)} rows")
+    else:
+        relatives_df = pd.DataFrame()
+        print(f"\n  No (RIMNO, PRODUCT_NAME) duplicates found — all CUSTOMER_IDs are unique per combo.")
+
     # --- Save ---
     active_path = os.path.join(output_dir, f"{file_basename}_active.csv")
     historical_path = os.path.join(output_dir, f"{file_basename}_historical.csv")
@@ -166,6 +236,11 @@ for file in prime_files:
 
     print(f"  Saved -> {active_path}")
     print(f"  Saved -> {historical_path}")
+
+    if len(relatives_df) > 0:
+        relatives_path = os.path.join(output_dir, f"{file_basename}_active_relatives.csv")
+        relatives_df.to_csv(relatives_path, index=False)
+        print(f"  Saved -> {relatives_path}")
 
     if len(other_df) > 0:
         other_path = os.path.join(output_dir, f"{file_basename}_other.csv")
