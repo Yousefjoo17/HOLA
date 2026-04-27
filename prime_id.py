@@ -159,6 +159,7 @@ for file in prime_files:
 
     # Clean up ACTIVATED and STATUS for reliable splitting
     df['STATUS'] = df['STATUS'].astype("string").str.strip().str.upper()
+    df['Card account status '] = df['Card account status '].astype("string").str.strip().str.upper()
 
     # --- Assign CUSTOMER_ID from the global mapping ---
     # Prepare RIMNO to match the format used in the global mapping
@@ -173,7 +174,9 @@ for file in prime_files:
 
     # --- Split into Active & Historical ---
     # Historical: ACTIVATED is D/I  OR  STATUS is an inactive code
-    is_historical = df['STATUS'].isin(inactive_statuses)
+    is_inactive_status = df['STATUS'].isin(inactive_statuses)
+    is_inactive_card = df['Card account status '].isin(inactive_statuses)
+    is_historical = is_inactive_status & is_inactive_card
 
     historical_df = df[is_historical].copy()
     active_df = df[~is_historical].copy()
