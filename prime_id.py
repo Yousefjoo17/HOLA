@@ -104,7 +104,7 @@ for file in prime_files:
     temp_df = pd.read_csv(
         file,
         encoding='latin',
-        usecols=['RIM_NO', 'RIMNO', 'DOB'],  # only need the key columns
+        usecols=['RIMNO', 'RIMNO', 'DOB'],  # only need the key columns
         dtype='string'
     )
 
@@ -140,7 +140,7 @@ for file in prime_files:
         encoding='latin',
         dtype={col: "string" for col in prime_string_cols + prime_int_cols + prime_float_cols},
         parse_dates=prime_date_cols
-    ).rename(columns={'RIM_NO': 'RIMNO', 'NAME': 'PRODUCT_NAME'})
+    ).rename(columns={'RIMNO': 'RIMNO', 'NAME': 'PRODUCT_NAME'})
 
     print(f"  Rows loaded: {len(df)}")
 
@@ -158,7 +158,6 @@ for file in prime_files:
     apply_cast_and_report(df, prime_date_cols, 'date')
 
     # Clean up ACTIVATED and STATUS for reliable splitting
-    df['ACTIVATED'] = df['ACTIVATED'].astype("string").str.strip().str.upper()
     df['STATUS'] = df['STATUS'].astype("string").str.strip().str.upper()
 
     # --- Assign CUSTOMER_ID from the global mapping ---
