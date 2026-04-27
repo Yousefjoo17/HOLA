@@ -109,8 +109,8 @@ for file in prime_files:
     )
 
     # Standardize column name
-    if 'RIM_NO' in temp_df.columns:
-        temp_df = temp_df.rename(columns={'RIM_NO': 'RIMNO'})
+    if 'RIMNO' in temp_df.columns:
+        temp_df = temp_df.rename(columns={'RIMNO': 'RIMNO'})
 
     temp_df['RIMNO'] = temp_df['RIMNO'].str.strip()
     temp_df['DOB'] = pd.to_datetime(temp_df['DOB'], errors='coerce')
