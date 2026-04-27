@@ -174,20 +174,13 @@ for file in prime_files:
 
     # --- Split into Active & Historical ---
     # Historical: ACTIVATED is D/I  OR  STATUS is an inactive code
-    is_inactive_activated = df['ACTIVATED'].isin(['D', 'I'])
-    is_inactive_status = df['STATUS'].isin(inactive_statuses)
-    is_historical = is_inactive_activated | is_inactive_status
+    is_historical = df['STATUS'].isin(inactive_statuses)
 
     historical_df = df[is_historical].copy()
-    active_df = df[(df['ACTIVATED'] == 'A') & ~is_inactive_status].copy()
-    other_df = df[~is_historical & ~((df['ACTIVATED'] == 'A') & ~is_inactive_status)]
+    active_df = df[~is_historical].copy()
 
     print(f"  Active   (ACTIVATED='A' & active STATUS):   {len(active_df)} rows")
     print(f"  Historical (ACTIVATED='D'/'I' or inactive STATUS): {len(historical_df)} rows")
-    if len(other_df) > 0:
-        print(f"  Other (unrecognized): {len(other_df)} rows")
-        print(f"    ACTIVATED values: {other_df['ACTIVATED'].unique().tolist()}")
-        print(f"    STATUS values:    {other_df['STATUS'].unique().tolist()}")
 
     # --- Detect relatives: same (RIMNO, PRODUCT_NAME) but different CUSTOMER_ID ---
     # For each (RIMNO, PRODUCT_NAME) group, keep only the row(s) with the oldest DOB
@@ -241,11 +234,6 @@ for file in prime_files:
         relatives_path = os.path.join(output_dir, f"{file_basename}_active_relatives.csv")
         relatives_df.to_csv(relatives_path, index=False)
         print(f"  Saved -> {relatives_path}")
-
-    if len(other_df) > 0:
-        other_path = os.path.join(output_dir, f"{file_basename}_other.csv")
-        other_df.to_csv(other_path, index=False)
-        print(f"  Saved -> {other_path}")
 
     print()
 
