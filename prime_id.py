@@ -101,8 +101,32 @@ for file in prime_files:
     print("\n  -> Date Columns:")
     apply_cast_and_report(df, prime_date_cols, 'date')
 
-    # Clean up ACTIVATED for reliable splitting
+    # Clean up ACTIVATED and STATUS for reliable splitting
     df['ACTIVATED'] = df['ACTIVATED'].astype("string").str.strip().str.upper()
+    df['STATUS'] = df['STATUS'].astype("string").str.strip().str.upper()
+
+    # Status codes that indicate an inactive / closed / blocked card
+    inactive_statuses = [
+        'CLSB',   # closed by bank
+        'CLSC',   # closed by customer
+        'LOST',   # lost card
+        'WROF',   # write off status
+        'CNCD',   # card not collected by DSU
+        'SUSP',   # profit suspended
+        'FRAD',   # pick up card special fraud
+        'CLSD',   # closed
+        'BLOK',   # blok card
+        'NOAU',   # no authorization
+        'EXMU',   # expired murabha
+        'PICK',   # pick up card
+        'BLCK',   # blocked status
+        'STLC',   # stolen card
+        'OFBL',   # offline pin block
+        'ONBL',   # online pin block
+        'FREZ',   # freeze card
+        'EXPD',   # expired
+        'EXPC',   # expired card
+    ]
 
     # --- Assign CUSTOMER_ID based on unique (RIMNO, DOB) pairs in THIS file ---
     unique_pairs = df[['RIMNO', 'DOB']].drop_duplicates().reset_index(drop=True)
@@ -117,14 +141,21 @@ for file in prime_files:
         print(f"  WARNING: {unmatched} rows could not be assigned a CUSTOMER_ID (missing RIMNO or DOB).")
 
     # --- Split into Active & Historical ---
-    active_df = df[df['ACTIVATED'] == 'A'].copy()
-    historical_df = df[df['ACTIVATED'].isin(['D', 'I'])].copy()
-    other_df = df[~df['ACTIVATED'].isin(['A', 'D', 'I'])]
+    # Historical: ACTIVATED is D/I  OR  STATUS is an inactive code
+    is_inactive_activated = df['ACTIVATED'].isin(['D', 'I'])
+    is_inactive_status = df['STATUS'].isin(inactive_statuses)
+    is_historical = is_inactive_activated | is_inactive_status
 
-    print(f"  Active   (A):   {len(active_df)} rows")
-    print(f"  Historical (D/I): {len(historical_df)} rows")
+    historical_df = df[is_historical].copy()
+    active_df = df[(df['ACTIVATED'] == 'A') & ~is_inactive_status].copy()
+    other_df = df[~is_historical & ~((df['ACTIVATED'] == 'A') & ~is_inactive_status)]
+
+    print(f"  Active   (ACTIVATED='A' & active STATUS):   {len(active_df)} rows")
+    print(f"  Historical (ACTIVATED='D'/'I' or inactive STATUS): {len(historical_df)} rows")
     if len(other_df) > 0:
-        print(f"  Other (unrecognized): {len(other_df)} rows -> {other_df['ACTIVATED'].unique().tolist()}")
+        print(f"  Other (unrecognized): {len(other_df)} rows")
+        print(f"    ACTIVATED values: {other_df['ACTIVATED'].unique().tolist()}")
+        print(f"    STATUS values:    {other_df['STATUS'].unique().tolist()}")
 
     # --- Save ---
     active_path = os.path.join(output_dir, f"{file_basename}_active.csv")
