@@ -51,9 +51,9 @@ prime_int_cols = ["BRANCH_ID", "RIMNO"]
 prime_float_cols = [
     "CREDIT_LIMIT", "DELIQUENCY", "LEDGER_BALANCE", "AVAILABLE_LIMIT",
     "OVERDUEAMOUNT", "FIRST_REPLACED_CARD", "SECOND_REPLACED_CARD",
-    "THIRD_REPLACED_CARD", "SETTLEMENT AMT"
+    "THIRD_REPLACED_CARD"
 ]
-prime_date_cols = ["CREATION_DATE", "LAST_STAEMENT_DATE", "LAST_PAYMENT_DATE", "DOB", "CLOSURE_DATE"]
+prime_date_cols = ["CREATION_DATE", "LAST_STATEMENT_DATE", "DOB", "CLOSURE_DATE"]
 
 
 # ========================= Output Directory =========================
