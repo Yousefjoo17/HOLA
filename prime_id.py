@@ -159,7 +159,7 @@ for file in prime_files:
 
     # Clean up ACTIVATED and STATUS for reliable splitting
     df['ACTIVATED'] = df['ACTIVATED'].astype("string").str.strip().str.upper()
-    df['STATUS'] = df['STATUS'].astype("string").str.strip().str.lower()
+    df['STATUS'] = df['STATUS'].astype("string").str.strip().str.upper()
 
     # --- Assign CUSTOMER_ID from the global mapping ---
     # Prepare RIMNO to match the format used in the global mapping
