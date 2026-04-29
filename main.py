@@ -178,7 +178,7 @@ prime_df["PRODUCT_NAME"] = prime_df["PRODUCT_NAME"].map(
 )
 
 # Transaction
-transaction_counts = transaction_df["PRODUCT_NAME"].value_counts()
+transaction_counts = transaction_df["Description"].value_counts()
 transaction_df["PRODUCT_NAME"] = transaction_df["PRODUCT_NAME"].map(
     lambda x: x if transaction_counts.get(x, 0) >= Product_frequency_threshold else "another product"
 )
