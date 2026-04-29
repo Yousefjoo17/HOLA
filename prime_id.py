@@ -91,6 +91,7 @@ inactive_statuses = [
     'FREZ',   # freeze card
     'EXPD',   # expired
     'EXPC',   # expired card
+    'CLSS'
 ]
 
 
