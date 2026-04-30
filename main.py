@@ -148,7 +148,6 @@ for col in prime_categorical_cols:
     print(f"Unique values in {col}: {unique_values}")
 
 
-
 #========================= Transaction & Prime Encoding Export ==========================
 trxn_categorical_cols = ["DESCRIPTION","CCY","MCC","SETTLEMENT CCY","BANKBRANCH","TRXN COUNTRY","REVERSAL FLAG"]
 prime_categorical_cols = ["BRANCH_NAME",'FIRST_REPLACED_CARD', 'SECOND_REPLACED_CARD','THIRD_REPLACED_CARD']
@@ -233,7 +232,6 @@ prime_df = prime_df.merge(travel_features, on='RIMNO', how='left')
 trxn_feature_cols = rfm_features.columns.tolist() + mcc_spend.columns.tolist() + travel_features.columns.tolist()
 trxn_feature_cols.remove('RIMNO')
 prime_df[trxn_feature_cols] = transaction_df[trxn_feature_cols].fillna(0)
-
 
 
 # 1. Calculate Age

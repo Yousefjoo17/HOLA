@@ -58,20 +58,20 @@ if not prime_files:
 else:
     # Read all files as strings first to prevent mixed-type warnings during concat
     prime_dfs = [pd.read_csv(f, encoding='latin', dtype=str) for f in prime_files]
-    master_prime_df = pd.concat(prime_dfs, ignore_index=True)
+    prime_df = pd.concat(prime_dfs, ignore_index=True)
     
-    print(f"Loaded {len(master_prime_df)} total rows from {len(prime_files)} files.\n")
+    print(f"Loaded {len(prime_df)} total rows from {len(prime_files)} files.\n")
     print("Applying Casting to Master Prime Data:")
     
-    apply_cast_and_report(master_prime_df, prime_string_cols, 'string')
-    apply_cast_and_report(master_prime_df, prime_int_cols, 'int')
-    apply_cast_and_report(master_prime_df, prime_float_cols, 'float')
-    apply_cast_and_report(master_prime_df, prime_date_cols, 'date')
+    apply_cast_and_report(prime_df, prime_string_cols, 'string')
+    apply_cast_and_report(prime_df, prime_int_cols, 'int')
+    apply_cast_and_report(prime_df, prime_float_cols, 'float')
+    apply_cast_and_report(prime_df, prime_date_cols, 'date')
 
-    print(f"\n✅ Saved Master Prime File -> {master_prime_df.info()}\n")
+    print(f"\n✅ Saved Master Prime File -> {prime_df.info()}\n")
     # Save to current directory
     prime_output = "MASTER_active_prime.csv"
-    master_prime_df.to_csv(prime_output, index=False)
+    prime_df.to_csv(prime_output, index=False)
     print(f"\n✅ Saved Master Prime File -> {prime_output}\n")
 
 
@@ -89,45 +89,174 @@ if not txn_files:
 else:
     # Read all files as strings first
     txn_dfs = [pd.read_csv(f, encoding='latin', dtype=str) for f in txn_files]
-    master_txn_df = pd.concat(txn_dfs, ignore_index=True)
+    transaction_df = pd.concat(txn_dfs, ignore_index=True)
     
-    print(f"Loaded {len(master_txn_df)} total rows from {len(txn_files)} files.\n")
+    print(f"Loaded {len(transaction_df)} total rows from {len(txn_files)} files.\n")
     print("Applying Casting to Master Transaction Data:")
     
-    apply_cast_and_report(master_txn_df, transaction_string_cols, 'string')
-    apply_cast_and_report(master_txn_df, transaction_int_cols, 'int')
-    apply_cast_and_report(master_txn_df, transaction_float_cols, 'float')
-    apply_cast_and_report(master_txn_df, transaction_date_cols, 'date')
+    apply_cast_and_report(transaction_df, transaction_string_cols, 'string')
+    apply_cast_and_report(transaction_df, transaction_int_cols, 'int')
+    apply_cast_and_report(transaction_df, transaction_float_cols, 'float')
+    apply_cast_and_report(transaction_df, transaction_date_cols, 'date')
 
-    print(f"\n✅ Saved Master Prime File -> {master_txn_df.info()}\n")
+    print(f"\n✅ Saved Master Prime File -> {transaction_df.info()}\n")
     # Save to current directory
     txn_output = "MASTER_transactions.csv"
-    master_txn_df.to_csv(txn_output, index=False)
+    transaction_df.to_csv(txn_output, index=False)
     print(f"\n✅ Saved Master Transaction File -> {txn_output}\n")
 
 print("All consolidations complete!")
 
+# ========================= 3. Cleanup & Final Info ==========================
+prime_columns_to_drop = ["MAPPING_ACCNO", "MIN_PAYMENT", "OVER_LIMIT", "TOTAL_HOLD" ,"ORGANIZATION","JOINING_FEE","ANNUAL_FEE","LAST_PAYMENT_AMOUNT", "LAST_PAYMENT_DATE", "SETTLEMENT AMT",'FIRST_REPLACED_CARD', 'SECOND_REPLACED_CARD','THIRD_REPLACED_CARD']
+existing_cols_to_drop = [col for col in prime_columns_to_drop if col in prime_df.columns]
+prime_df = prime_df.drop(columns=existing_cols_to_drop)
+
+print("\n--- Final Dataframe Info ---")
+print(prime_df.info())
 
 
 
-import pandas as pd
+transaction_columns_to_drop = ["POST DATE","ORIG AMOUNT","EMBEDDED _FEE", "SETTLEMENT AMT", "SETTLEMENT CCY", "SOURCES"]
+existing_cols_to_drop = [col for col in transaction_columns_to_drop if col in transaction_df.columns]
+transaction_df = transaction_df.drop(columns=existing_cols_to_drop)
 
-# 2. Perform the INNER JOIN
-# We use suffixes to rename columns that exist in BOTH tables (like RIMNO)
-# so you know which file they came from.
-final_merged_df = pd.merge(
-    master_prime_df, 
-    master_txn_df, 
-    on='CUSTOMER_ID', 
-    how='inner',
-    suffixes=('_prime', '_txn')
+print("\n--- Final Transaction Dataframe Info ---")
+print(transaction_df.info())
+
+prime_df["GENDER"] = prime_df["GENDER"].fillna("Unknown")
+
+
+
+
+
+#=========================transaction Encoding ==========================
+trxn_categorical_cols = ["PRODUCT_NAME","MCC","BANKBRANCH"]
+for col in trxn_categorical_cols:
+    unique_values = transaction_df[col].unique()
+    print(f"Unique values in {col}: {unique_values}")
+
+#=====================Prime Encoding=========================
+prime_categorical_cols = ["PRODUCT_NAME","BRANCH_NAME"]
+for col in prime_categorical_cols:
+    unique_values = prime_df[col].unique()
+    print(f"Unique values in {col}: {unique_values}")
+
+
+    
+Product_frequency_threshold = 500
+
+prime_counts = prime_df["PRODUCT_NAME"].value_counts()
+prime_df["PRODUCT_NAME"] = prime_df["PRODUCT_NAME"].map(
+    lambda x: x if prime_counts.get(x, 0) >= Product_frequency_threshold else "another product"
 )
 
-# 3. Check the results
-print(f"Prime accounts: {len(master_prime_df)}")
-print(f"Total transactions: {len(master_txn_df)}")
-print(f"Successfully matched rows: {len(final_merged_df)}")
+transaction_counts = transaction_df["PRODUCT_NAME"].value_counts()
+transaction_df["PRODUCT_NAME"] = transaction_df["PRODUCT_NAME"].map(
+    lambda x: x if transaction_counts.get(x, 0) >= Product_frequency_threshold else "another product"
+)
 
-# 4. Save the final result
-final_merged_df.to_csv("FINAL_Prime_with_Transactions.csv", index=False)
-print("Saved final merged dataset.")
+MCC_frequency_threshold = 5000
+transaction_counts = transaction_df["MCC"].value_counts()
+transaction_df["MCC"] = transaction_df["MCC"].map(
+    lambda x: x if transaction_counts.get(x, 0) >= MCC_frequency_threshold else "another product"
+)
+
+
+user_item_matrix = pd.crosstab(prime_df['CUSTOMER_ID'], prime_df['PRODUCT_NAME'])
+user_item_matrix.columns = [f"HAS_PROD_{col.strip().replace(' ', '_')}" for col in user_item_matrix.columns]
+prime_df = prime_df.drop_duplicates(subset=['CUSTOMER_ID']).merge(user_item_matrix, on='CUSTOMER_ID', how='inner')
+
+
+# 1. Standard RFM (Recency, Frequency, Monetary)
+rfm_features = transaction_df.groupby('CUSTOMER_ID').agg(
+    TOTAL_SPEND_AMT=('BILLING AMT', 'sum'),
+    AVG_TRXN_AMT=('BILLING AMT', 'mean'),
+    TRXN_COUNT=('BILLING AMT', 'count'),
+    DAYS_SINCE_LAST_TRXN=('TRXN DATE', lambda x: (pd.to_datetime('today') - x.max()).days)
+).reset_index()
+
+# 2. Spend by Merchant Category Code (MCC) or Description
+# This tells you if they are a traveler, foodie, online shopper, etc.
+# We pivot to get the total spend per MCC per customer
+mcc_spend = pd.pivot_table(
+    transaction_df, 
+    values='BILLING AMT', 
+    index='CUSTOMER_ID', 
+    columns='MCC', 
+    aggfunc='sum', 
+    fill_value=0
+)
+
+mcc_spend.columns = [f"MCC_{str(col)}_SPEND" for col in mcc_spend.columns]
+mcc_spend = mcc_spend.reset_index()
+
+transaction_df['IS_FOREIGN_TRXN'] = (transaction_df['TRXN COUNTRY'] != 'EG').fillna(False).astype(int)
+
+extraction_date = pd.to_datetime("today")
+prime_df['AGE'] = (extraction_date - prime_df['DOB']).dt.days // 365
+
+bins = [18, 25, 35, 50, 65, 100]
+labels = ['18-25', '26-35', '36-50', '51-65', '65+']
+prime_df['AGE_GROUP'] = pd.cut(prime_df['AGE'], bins=bins, labels=labels, right=True)
+
+
+
+# ========================= 4. Aggregate Remaining Features =========================
+# You created the 'IS_FOREIGN_TRXN' flag, so let's count how many foreign 
+# transactions each customer made before merging.
+foreign_agg = transaction_df.groupby('CUSTOMER_ID').agg(
+    FOREIGN_TRXN_COUNT=('IS_FOREIGN_TRXN', 'sum')
+).reset_index()
+
+
+# ========================= 5. The Final Customer 360 Merge =========================
+print("\n============================================================")
+print(" PHASE 3: Building Final Customer Profile (1 Row per Customer)")
+print("============================================================\n")
+
+# Your prime_df was already deduplicated and merged with the user_item_matrix
+# earlier in your script. So it is the perfect base table.
+final_customer_profile = prime_df.copy()
+
+# 1. Merge RFM Features
+final_customer_profile = final_customer_profile.merge(rfm_features, on='CUSTOMER_ID', how='inner')
+
+# 2. Merge MCC Spend Matrix
+final_customer_profile = final_customer_profile.merge(mcc_spend, on='CUSTOMER_ID', how='inner')
+
+# 3. Merge Foreign Transaction Counts
+final_customer_profile = final_customer_profile.merge(foreign_agg, on='CUSTOMER_ID', how='inner')
+
+
+# ========================= 6. Handle Missing Values (Imputation) =========================
+# Because we did a LEFT JOIN, Prime customers who have NO transactions will 
+# have NaN for their RFM and Spend columns. We need to fill those with 0.
+
+# Get all MCC columns dynamically
+mcc_cols = [col for col in mcc_spend.columns if col != 'CUSTOMER_ID']
+
+# List of all transaction-based columns that should be 0 if missing
+fill_zero_cols = ['TOTAL_SPEND_AMT', 'AVG_TRXN_AMT', 'TRXN_COUNT', 'FOREIGN_TRXN_COUNT'] + mcc_cols
+
+final_customer_profile[fill_zero_cols] = final_customer_profile[fill_zero_cols].fillna(0)
+
+# For DAYS_SINCE_LAST_TRXN, 0 would mean they transacted today. 
+# Since they NEVER transacted, we should fill it with a completely out-of-range number 
+# (like 9999) so your machine learning model recognizes them as inactive.
+final_customer_profile['DAYS_SINCE_LAST_TRXN'] = final_customer_profile['DAYS_SINCE_LAST_TRXN'].fillna(9999)
+
+
+# ========================= 7. Final Output Verification =========================
+print("--- Final Dataset Dimensions ---")
+print(f"Total Rows (Unique Customers): {len(final_customer_profile)}")
+print(f"Total Columns (Features): {len(final_customer_profile.columns)}")
+
+# Save the master dataset for your ML models
+final_output_path = "CUSTOMER_360_FEATURES.csv"
+final_customer_profile.to_csv(final_output_path, index=False)
+print(f"\n✅ Saved Final Machine Learning Dataset -> {final_output_path}")
+
+# Display a quick preview
+print("\nPreview of final data:")
+print(final_customer_profile[['CUSTOMER_ID', 'AGE_GROUP', 'TOTAL_SPEND_AMT', 'TRXN_COUNT']].head())
