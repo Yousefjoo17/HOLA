@@ -243,6 +243,34 @@ existing_cols_to_drop = [col for col in final_columns_to_drop if col in final_cu
 final_customer_profile = final_customer_profile.drop(columns=existing_cols_to_drop)
 
 
+
+from sklearn.preprocessing import StandardScaler
+# ========================= 6.5 Data Scaling (StandardScaler) =========================
+print("Applying StandardScaler to continuous numeric features...")
+
+# 1. Identify all numeric columns
+numeric_dtypes = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64', 'Int64', 'Float64']
+all_numeric_cols = final_customer_profile.select_dtypes(include=numeric_dtypes).columns.tolist()
+
+# 2. Define columns that should NOT be scaled
+exclude_from_scaling = ['CUSTOMER_ID', 'BRANCH_ID']
+
+# Also exclude the binary columns (0/1) created by the user_item_matrix crosstab
+binary_prod_cols = [col for col in all_numeric_cols if col.startswith('HAS_PROD_')]
+cols_to_exclude = set(exclude_from_scaling + binary_prod_cols)
+
+# 3. Filter down to only the columns that actually need scaling
+cols_to_scale = [col for col in all_numeric_cols if col not in cols_to_exclude]
+
+if len(cols_to_scale) > 0:
+    # 4. Apply the scaler
+    scaler = StandardScaler()
+    final_customer_profile[cols_to_scale] = scaler.fit_transform(final_customer_profile[cols_to_scale])
+    print(f"  -> Scaled {len(cols_to_scale)} continuous features.")
+else:
+    print("  -> No continuous features found to scale.")
+
+    
 # ========================= 7. Final Output Verification =========================
 print("--- Final Dataset Dimensions ---")
 print(f"Total Rows (Unique Customers): {len(final_customer_profile)}")
