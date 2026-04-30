@@ -68,12 +68,6 @@ else:
     apply_cast_and_report(prime_df, prime_float_cols, 'float')
     apply_cast_and_report(prime_df, prime_date_cols, 'date')
 
-    print(f"\n✅ Saved Master Prime File -> {prime_df.info()}\n")
-    # Save to current directory
-    prime_output = "MASTER_active_prime.csv"
-    prime_df.to_csv(prime_output, index=False)
-    print(f"\n✅ Saved Master Prime File -> {prime_output}\n")
-
 
 # ========================= 2. Consolidate Transactions =========================
 print("============================================================")
@@ -98,12 +92,6 @@ else:
     apply_cast_and_report(transaction_df, transaction_int_cols, 'int')
     apply_cast_and_report(transaction_df, transaction_float_cols, 'float')
     apply_cast_and_report(transaction_df, transaction_date_cols, 'date')
-
-    print(f"\n✅ Saved Master Prime File -> {transaction_df.info()}\n")
-    # Save to current directory
-    txn_output = "MASTER_transactions.csv"
-    transaction_df.to_csv(txn_output, index=False)
-    print(f"\n✅ Saved Master Transaction File -> {txn_output}\n")
 
 print("All consolidations complete!")
 
