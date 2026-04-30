@@ -96,7 +96,11 @@ else:
 print("All consolidations complete!")
 
 # ========================= 3. Cleanup & Final Info ==========================
-prime_columns_to_drop = ["MAPPING_ACCNO", "MIN_PAYMENT", "OVER_LIMIT", "TOTAL_HOLD" ,"ORGANIZATION","JOINING_FEE","ANNUAL_FEE","LAST_PAYMENT_AMOUNT", "LAST_PAYMENT_DATE", "SETTLEMENT AMT",'FIRST_REPLACED_CARD', 'SECOND_REPLACED_CARD','THIRD_REPLACED_CARD']
+prime_columns_to_drop = ["MAPPING_ACCNO", "STATUS","CREATION_DATE","MIN_PAYMENT", "OVER_LIMIT", "ACTIVATED",
+                        "DELIQUENCY","STATUS_NAME","OVER_LIMIT","TOTAL_HOLD" ,"ORGANIZATION","JOINING_FEE",
+                        "ANNUAL_FEE","LAST_PAYMENT_AMOUNT", "LAST_PAYMENT_DATE", "SETTLEMENT AMT",'FIRST_REPLACED_CARD',
+                        'SECOND_REPLACED_CARD','THIRD_REPLACED_CARD', 'LAST_STAEMENT_DATE', "LEDGER_BALANCE", "AVAILABLE_LIMIT",
+                        "CLOSURE_DATE", "Card account status ", "CUSTOMER_TYPE", "OVERDUEAMOUNT"]
 existing_cols_to_drop = [col for col in prime_columns_to_drop if col in prime_df.columns]
 prime_df = prime_df.drop(columns=existing_cols_to_drop)
 
@@ -214,7 +218,7 @@ final_customer_profile = final_customer_profile.merge(rfm_features, on='CUSTOMER
 final_customer_profile = final_customer_profile.merge(mcc_spend, on='CUSTOMER_ID', how='inner')
 
 # 3. Merge Foreign Transaction Counts
-final_customer_profile = final_customer_profile.merge(foreign_agg, on='CUSTOMER_ID', how='inner')
+final_customer_profile = final_customer_profile.merge(foreign_agg, on='CUSTOMER_ID', how='left')
 
 
 # ========================= 6. Handle Missing Values (Imputation) =========================
