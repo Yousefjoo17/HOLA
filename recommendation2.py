@@ -310,6 +310,7 @@ feature_cols = [col for col in ml_df.columns if col not in target_cols and col !
 
 X = ml_df[feature_cols]
 y = ml_df[target_cols]
+y = (y > 0).astype(np.int8)
 
 print(f"Features (X) shape: {X.shape}")
 print(f"Targets (y) shape: {y.shape}")
