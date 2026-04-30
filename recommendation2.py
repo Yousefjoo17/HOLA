@@ -106,3 +106,28 @@ else:
     print(f"\n✅ Saved Master Transaction File -> {txn_output}\n")
 
 print("All consolidations complete!")
+
+
+
+
+import pandas as pd
+
+# 2. Perform the INNER JOIN
+# We use suffixes to rename columns that exist in BOTH tables (like RIMNO)
+# so you know which file they came from.
+final_merged_df = pd.merge(
+    master_prime_df, 
+    master_txn_df, 
+    on='CUSTOMER_ID', 
+    how='inner',
+    suffixes=('_prime', '_txn')
+)
+
+# 3. Check the results
+print(f"Prime accounts: {len(master_prime_df)}")
+print(f"Total transactions: {len(master_txn_df)}")
+print(f"Successfully matched rows: {len(final_merged_df)}")
+
+# 4. Save the final result
+final_merged_df.to_csv("FINAL_Prime_with_Transactions.csv", index=False)
+print("Saved final merged dataset.")
