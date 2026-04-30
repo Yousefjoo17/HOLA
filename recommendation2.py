@@ -38,7 +38,7 @@ prime_string_cols = ["BRANCH_NAME", "ACTIVATED", "STATUS", "STATUS_NAME", "PRODU
 # Added CUSTOMER_ID so it gets typed properly
 prime_int_cols = ["BRANCH_ID", "RIMNO", "CUSTOMER_ID"] 
 prime_float_cols = ["CREDIT_LIMIT", "DELIQUENCY", "LEDGER_BALANCE", "AVAILABLE_LIMIT", "OVERDUEAMOUNT", "FIRST_REPLACED_CARD", "SECOND_REPLACED_CARD", "THIRD_REPLACED_CARD", "SETTLEMENT AMT"]
-prime_date_cols = ["CREATION_DATE", "LAST_STAEMENT_DATE", "LAST_PAYMENT_DATE", "DOB", "CLOSURE_DATE"]
+prime_date_cols = ["CREATION_DATE", "LAST_STATEMENT_DATE", "LAST_PAYMENT_DATE", "DOB", "CLOSURE_DATE"]
 
 transaction_string_cols = ["DESCRIPTION", "MERCHNAME", "MERCH ID", "SOURCES", "BANKBRANCH", "TRXN COUNTRY", "REVERSAL FLAG", "PRODUCT_NAME"]
 # Added CUSTOMER_ID so it gets typed properly
@@ -99,7 +99,7 @@ print("All consolidations complete!")
 prime_columns_to_drop = ["MAPPING_ACCNO", "STATUS","CREATION_DATE","MIN_PAYMENT", "OVER_LIMIT", "ACTIVATED",
                         "DELIQUENCY","STATUS_NAME","OVER_LIMIT","TOTAL_HOLD" ,"ORGANIZATION","JOINING_FEE",
                         "ANNUAL_FEE","LAST_PAYMENT_AMOUNT", "LAST_PAYMENT_DATE", "SETTLEMENT AMT",'FIRST_REPLACED_CARD',
-                        'SECOND_REPLACED_CARD','THIRD_REPLACED_CARD', 'LAST_STAEMENT_DATE', "LEDGER_BALANCE", "AVAILABLE_LIMIT",
+                        'SECOND_REPLACED_CARD','THIRD_REPLACED_CARD', 'LAST_STATEMENT_DATE', "LEDGER_BALANCE", "AVAILABLE_LIMIT",
                         "CLOSURE_DATE", "Card account status ", "CUSTOMER_TYPE", "OVERDUEAMOUNT"]
 existing_cols_to_drop = [col for col in prime_columns_to_drop if col in prime_df.columns]
 prime_df = prime_df.drop(columns=existing_cols_to_drop)
@@ -270,19 +270,79 @@ if len(cols_to_scale) > 0:
 else:
     print("  -> No continuous features found to scale.")
 
-    
+
 # ========================= 7. Final Output Verification =========================
 print("--- Final Dataset Dimensions ---")
 print(f"Total Rows (Unique Customers): {len(final_customer_profile)}")
 print(f"Total Columns (Features): {len(final_customer_profile.columns)}")
 
-# Save the master dataset for your ML models
-final_output_path = "CUSTOMER_360_FEATURES.csv"
-final_customer_profile.to_csv(final_output_path, index=False)
-print(f"\n✅ Saved Final Machine Learning Dataset -> {final_output_path}")
+# # Save the master dataset for your ML models
+# final_output_path = "CUSTOMER_360_FEATURES.csv"
+# final_customer_profile.to_csv(final_output_path, index=False)
+# print(f"\n✅ Saved Final Machine Learning Dataset -> {final_output_path}")
 
 # Display a quick preview
 print("\nPreview of final data:")
 print(final_customer_profile[['CUSTOMER_ID', 'AGE_GROUP', 'TOTAL_SPEND_AMT', 'TRXN_COUNT']].head())
 
 
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, classification_report
+import pandas as pd
+
+print("\n============================================================")
+print(" PHASE 4: Multi-Label Machine Learning Model")
+print("============================================================\n")
+
+# 1. Final Preprocessing: One-Hot Encode Categorical Features
+# Machine learning models cannot read strings like "Male" or "18-25". 
+# We must convert GENDER and AGE_GROUP into dummy variables (0/1).
+print("Encoding remaining categorical variables...")
+ml_df = pd.get_dummies(final_customer_profile, columns=['GENDER', 'AGE_GROUP'], drop_first=True)
+
+# 2. Define Features (X) and Targets (y)
+# Targets: All columns that start with 'HAS_PROD_'
+target_cols = [col for col in ml_df.columns if col.startswith('HAS_PROD_')]
+
+# Features: Everything else (Except the CUSTOMER_ID, which has no predictive value)
+feature_cols = [col for col in ml_df.columns if col not in target_cols and col != 'CUSTOMER_ID']
+
+X = ml_df[feature_cols]
+y = ml_df[target_cols]
+
+print(f"Features (X) shape: {X.shape}")
+print(f"Targets (y) shape: {y.shape}")
+
+# 3. Train/Validation Split (80% Train, 20% Validation)
+X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+print(f"\nTraining set size: {len(X_train)} rows")
+print(f"Validation set size: {len(X_val)} rows")
+
+# 4. Initialize and Train the Model
+# n_estimators=100 is a good baseline. n_jobs=-1 uses all CPU cores for speed.
+print("\nTraining Random Forest Multi-Label Classifier... (This may take a moment)")
+rf_model = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)
+rf_model.fit(X_train, y_train)
+
+# 5. Make Predictions
+y_pred = rf_model.predict(X_val)
+
+# 6. Evaluation Metrics
+print("\n============================================================")
+print(" MODEL PERFORMANCE & ACCURACY")
+print("============================================================\n")
+
+# Subset Accuracy (Exact Match)
+# In multi-label, this is STRICT. It only counts as "correct" if the model 
+# guesses EVERY SINGLE product perfectly for a customer.
+exact_match_acc = accuracy_score(y_val, y_pred)
+print(f"Strict Exact Match Accuracy: {exact_match_acc * 100:.2f}%\n")
+
+# Classification Report (Micro and Macro Averages)
+# This is much more useful for multi-label. It tells you how well it predicted 
+# individual products, even if it got one wrong for a customer.
+print("Detailed Classification Report (F1-Scores per Product):")
+# zero_division=0 prevents warnings if a specific product was never predicted
+report = classification_report(y_val, y_pred, target_names=target_cols, zero_division=0)
+print(report)
