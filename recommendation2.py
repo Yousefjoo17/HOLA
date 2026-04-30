@@ -256,3 +256,5 @@ print(f"\n✅ Saved Final Machine Learning Dataset -> {final_output_path}")
 # Display a quick preview
 print("\nPreview of final data:")
 print(final_customer_profile[['CUSTOMER_ID', 'AGE_GROUP', 'TOTAL_SPEND_AMT', 'TRXN_COUNT']].head())
+
+
