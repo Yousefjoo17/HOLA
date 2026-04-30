@@ -238,6 +238,10 @@ final_customer_profile[fill_zero_cols] = final_customer_profile[fill_zero_cols].
 # (like 9999) so your machine learning model recognizes them as inactive.
 final_customer_profile['DAYS_SINCE_LAST_TRXN'] = final_customer_profile['DAYS_SINCE_LAST_TRXN'].fillna(9999)
 
+final_columns_to_drop = ['AGE', "BRANCH_NAME","PRODUCT_NAME","DOB","RIMNO","DOB_WAS_MISSING"]
+existing_cols_to_drop = [col for col in final_columns_to_drop if col in final_customer_profile.columns]
+final_customer_profile = final_customer_profile.drop(columns=existing_cols_to_drop)
+
 
 # ========================= 7. Final Output Verification =========================
 print("--- Final Dataset Dimensions ---")
