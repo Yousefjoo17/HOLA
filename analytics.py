@@ -121,6 +121,7 @@ prime_df["GENDER"] = prime_df["GENDER"].fillna("Unknown")
 
 user_item_matrix = pd.crosstab(prime_df['CUSTOMER_ID'], prime_df['PRODUCT_NAME'])
 user_item_matrix.columns = [f"HAS_PROD_{col.strip().replace(' ', '_')}" for col in user_item_matrix.columns]
+user_item_matrix = (user_item_matrix > 0).astype(int)
 prime_df = prime_df.drop_duplicates(subset=['CUSTOMER_ID']).merge(user_item_matrix, on='CUSTOMER_ID', how='inner')
 
 
