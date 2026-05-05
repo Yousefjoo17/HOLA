@@ -257,16 +257,26 @@ product_cols = [col for col in final_customer_profile.columns if col.startswith(
 exclude_cols = ['CUSTOMER_ID', 'BRANCH_ID'] + product_cols
 feature_cols = [col for col in final_customer_profile.columns if col not in exclude_cols]
 
+# Filter products: only include those with >= 500 customers
+print("Filtering products with >= 500 customers...")
+product_customer_counts = {prod: (final_customer_profile[prod] == 1).sum() for prod in product_cols}
+filtered_products = [prod for prod in product_cols if product_customer_counts[prod] >= 500]
+
+print(f"  Total products: {len(product_cols)}")
+print(f"  Products with >= 500 customers: {len(filtered_products)}")
+print(f"  Products excluded (< 500 customers): {len(product_cols) - len(filtered_products)}\n")
+
 # 2. Calculate Correlation Matrix
 print("Calculating feature correlations...")
-corr_matrix = final_customer_profile[feature_cols + product_cols].corr()
-prod_corr = corr_matrix.loc[feature_cols, product_cols]
+corr_matrix = final_customer_profile[feature_cols + filtered_products].corr()
+prod_corr = corr_matrix.loc[feature_cols, filtered_products]
 
 # 3. Print Top Correlated Features per Product
-print("\n--- Top Driving Features per Product ---")
-for prod in product_cols:
+print("\n--- Top Driving Features per Product (>= 500 customers) ---")
+for prod in filtered_products:
     product_name = prod.replace('HAS_PROD_', '')
-    print(f"\n>> Product: {product_name}")
+    customer_count = product_customer_counts[prod]
+    print(f"\n>> Product: {product_name} ({customer_count} customers)")
     
     sorted_corrs = prod_corr[prod].dropna().sort_values(ascending=False)
     
@@ -280,7 +290,7 @@ plt.figure(figsize=(14, 10))
 sns.heatmap(prod_corr, annot=False, cmap='coolwarm', center=0, 
             cbar_kws={'label': 'Pearson Correlation'})
 
-plt.title('Correlation: Customer Behaviors & Demographics vs. Product Ownership', fontsize=14)
+plt.title('Correlation: Customer Behaviors & Demographics vs. Product Ownership (Products with ≥500 customers)', fontsize=14)
 plt.ylabel('Customer Features', fontsize=12)
 plt.xlabel('Products', fontsize=12)
 plt.xticks(rotation=45, ha='right')
@@ -292,14 +302,14 @@ print(f"\n[Saved] Correlation heatmap saved exactly to: \n  -> {heatmap_path}")
 plt.close()
 
 # 5. Product Level Summary (Averages)
-print("\n--- Average Customer Profile per Product ---")
+print("\n--- Average Customer Profile per Product (>= 500 customers) ---")
 key_metrics = ['TOTAL_SPEND_AMT', 'AVG_TRXN_AMT', 'TRXN_COUNT', 'DAYS_SINCE_LAST_TRXN', 'FOREIGN_TRXN_COUNT']
 safe_metrics = [m for m in key_metrics if m in final_customer_profile.columns]
 
 summary_list = []
-for prod in product_cols:
+for prod in filtered_products:
     subset = final_customer_profile[final_customer_profile[prod] == 1]
-    if len(subset) > 0:
+    if len(subset) >= 500:
         avg_metrics = subset[safe_metrics].mean().to_dict()
         avg_metrics['Product'] = prod.replace('HAS_PROD_', '')
         avg_metrics['Total_Customers'] = len(subset)
@@ -315,46 +325,3 @@ if summary_list:
     # Save using the explicitly mapped directory path
     summary_df.to_csv(summary_path, index=False)
     print(f"\n[Saved] Product summary saved exactly to: \n  -> {summary_path}")
-
-
-
-    # ========================= 8. Population Reconcilliation =========================
-
-# 1. Count how many total products each customer has
-product_cols = [col for col in final_customer_profile.columns if col.startswith('HAS_PROD_')]
-products_per_customer = final_customer_profile[product_cols].sum(axis=1)
-
-# 2. Calculate the splits
-total_customers = len(final_customer_profile)
-no_product_count = (products_per_customer == 0).sum()
-has_product_count = (products_per_customer > 0).sum()
-
-# 3. Print the breakdown BEFORE the summary concept
-print("\n============================================================")
-print(" POPULATION BREAKDOWN")
-print("============================================================")
-print(f"Total Unique Customers in Data : {total_customers}")
-print(f"Customers with NO products     : {no_product_count}")
-print(f"Customers with 1+ products     : {has_product_count}")
-print("-" * 60)
-print(f"Math Check: {no_product_count} + {has_product_count} = {no_product_count + has_product_count}")
-
-# (Assuming summary_df is already created from the previous code)
-print("\n--- Product Summary Table ---")
-print(summary_df[['Product', 'Total_Customers']].to_string(index=False))
-
-# 4. Print the breakdown AFTER the summary concept
-sum_of_summary = summary_df['Total_Customers'].sum()
-
-print("\n============================================================")
-print(" POST-SUMMARY RECONCILIATION")
-print("============================================================")
-print(f"Sum of customers in the Summary Table: {sum_of_summary}")
-print(f"Unique customers with 1+ products    : {has_product_count}")
-print("-" * 60)
-print(f"Difference (Overlap)                 : {sum_of_summary - has_product_count}")
-
-print("\n💡 What this means:")
-print("If the sum of the Summary Table is LARGER than your unique customers with products,")
-print("it means you have cross-sell overlap! Specifically, there are " + str(sum_of_summary - has_product_count) + " instances")
-print("where a customer owns more than one product and is being counted in multiple buckets.")
