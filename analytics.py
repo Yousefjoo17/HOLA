@@ -222,6 +222,13 @@ import seaborn as sns
 print("Loading final_customer_profile.csv...")
 df = pd.read_csv("final_customer_profile.csv")
 
+import pandas as pd
+
+df = pd.read_csv("final_customer_profile.csv")
+
+for col in df.columns:
+    print(col, df[col].dtype)
+    
 # Identify product columns dynamically
 prod_cols = [col for col in df.columns if col.startswith('HAS_PROD_')]
 
