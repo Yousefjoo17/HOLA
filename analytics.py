@@ -327,60 +327,47 @@ if summary_list:
     summary_df.to_csv(summary_path, index=False)
     print(f"\n[Saved] Product summary saved exactly to: \n  -> {summary_path}")
 
-
-# ========================= 8. Feature Filtering: Drop Non-Correlated Features =========================
+# ========================= 8. Feature Selection (Correlation Filtering) =========================
 print("\n============================================================")
-print(" PHASE 5: Feature Filtering by Product Correlation")
+print(" PHASE 5: Dimensionality Reduction (Dropping Uncorrelated Features)")
 print("============================================================\n")
 
-# Recalculate correlation matrix including ALL features (including MCC)
-all_feature_cols = [col for col in final_customer_profile.columns 
-                    if col not in ['CUSTOMER_ID', 'BRANCH_ID'] + filtered_products]
+# 1. Define the threshold for "meaningful" correlation
+# (e.g., 0.05 means we drop features that have less than 5% correlation with EVERY product)
+CORR_THRESHOLD = 0.05 
 
-print(f"Total features available (including MCC): {len(all_feature_cols)}")
-print("Calculating full correlation matrix with all features...")
+# 2. Isolate feature columns and product columns
+product_cols = [col for col in final_customer_profile.columns if col.startswith('HAS_PROD_')]
+exclude_cols = ['CUSTOMER_ID', 'BRANCH_ID'] + product_cols
+feature_cols = [col for col in final_customer_profile.columns if col not in exclude_cols]
 
-full_corr_matrix = final_customer_profile[all_feature_cols + filtered_products].corr()
-features_vs_products = full_corr_matrix.loc[all_feature_cols, filtered_products]
+print(f"Analyzing {len(feature_cols)} features against {len(product_cols)} products...")
 
-# For each feature, check if it has ANY meaningful correlation with ANY product
-print("\nAnalyzing feature-product correlations...")
-features_to_keep = []
-features_to_drop = []
+# 3. Calculate correlation only between features and products
+corr_matrix = final_customer_profile[feature_cols + product_cols].corr()
+feature_product_corr = corr_matrix.loc[feature_cols, product_cols]
 
-for feature in all_feature_cols:
-    # Get the absolute correlations of this feature with all products
-    correlations = features_vs_products.loc[feature].abs()
-    
-    # Check if this feature has any non-zero correlation with at least one product
-    max_correlation = correlations.max()
-    
-    if max_correlation > 0:  # Keep features with any correlation > 0
-        features_to_keep.append(feature)
-    else:
-        features_to_drop.append(feature)
+# 4. Get the absolute maximum correlation for each feature across all products
+# (We use absolute because a strong negative correlation is still highly predictive!)
+max_corr_per_feature = feature_product_corr.abs().max(axis=1)
 
-print(f"\n  Features with correlation to products: {len(features_to_keep)}")
-print(f"  Features with NO correlation to any product: {len(features_to_drop)}")
+# 5. Identify features to keep vs drop
+features_to_keep = max_corr_per_feature[max_corr_per_feature >= CORR_THRESHOLD].index.tolist()
+features_to_drop = max_corr_per_feature[max_corr_per_feature < CORR_THRESHOLD].index.tolist()
 
-if features_to_drop:
-    print(f"\n  Dropping {len(features_to_drop)} non-correlated features:")
+print(f"\n[Filtering Threshold applied: {CORR_THRESHOLD}]")
+print(f" -> Keeping {len(features_to_keep)} strongly correlated features.")
+print(f" -> Dropping {len(features_to_drop)} weak/uncorrelated features.")
+
+if len(features_to_drop) > 0:
+    print("\nDropped Features:")
     for feat in features_to_drop:
-        print(f"    - {feat}")
-    
-    # Drop non-correlated features from the final dataset
-    final_customer_profile = final_customer_profile.drop(columns=features_to_drop)
-    
-    # Save the updated dataset
-    final_customer_profile.to_csv("final_customer_profile.csv", index=False)
-    print(f"\n[Updated] final_customer_profile.csv with {len(features_to_keep)} correlated features")
-else:
-    print("\n  All features have some correlation with products. No features dropped.")
+        print(f"  - {feat} (Max correlation: {max_corr_per_feature[feat]:.4f})")
 
-print("\n[Kept Features Summary]")
-print(f"  Total features retained: {len(features_to_keep)}")
-for feat in features_to_keep:
-    corrs = features_vs_products.loc[feat].abs()
-    max_corr = corrs.max()
-    max_prod = filtered_products[corrs.argmax()]
-    print(f"    {feat}: max correlation = {max_corr:.4f} (with {max_prod.replace('HAS_PROD_', '')})")
+# 6. Drop the uncorrelated features from the main dataframe
+final_customer_profile = final_customer_profile.drop(columns=features_to_drop)
+
+# 7. Save the optimized dataset for Machine Learning
+optimized_path = os.path.join(script_dir, "final_customer_profile_optimized.csv")
+final_customer_profile.to_csv(optimized_path, index=False)
+print(f"\n[Saved] Optimized ML-ready dataset saved to: \n  -> {optimized_path}")
