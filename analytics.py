@@ -254,7 +254,8 @@ summary_path = os.path.join(script_dir, 'product_profile_summary.csv')
 
 # 1. Identify Product Columns vs Feature Columns
 product_cols = [col for col in final_customer_profile.columns if col.startswith('HAS_PROD_')]
-exclude_cols = ['CUSTOMER_ID', 'BRANCH_ID'] + product_cols
+mcc_cols = [col for col in final_customer_profile.columns if col.startswith('MCC_')]
+exclude_cols = ['CUSTOMER_ID', 'BRANCH_ID'] + product_cols + mcc_cols
 feature_cols = [col for col in final_customer_profile.columns if col not in exclude_cols]
 
 # Filter products: only include those with >= 500 customers
