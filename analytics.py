@@ -237,6 +237,7 @@ import pandas as pd
 print("Loading final_customer_profile.csv...")
 final_customer_profile = pd.read_csv("final_customer_profile.csv")
 
+final_customer_profile = final_customer_profile.drop(columns=["BRANCH_ID"])
 
 
 # 1. Define the threshold for "meaningful" correlation
