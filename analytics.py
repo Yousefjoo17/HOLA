@@ -207,12 +207,15 @@ existing_cols_to_drop = [col for col in final_columns_to_drop if col in final_cu
 final_customer_profile = final_customer_profile.drop(columns=existing_cols_to_drop)
 
 # One-hot encode AGE_GROUP
-if 'AGE_GROUP' in final_customer_profile.columns:
-    age_group_dummies = pd.get_dummies(final_customer_profile['AGE_GROUP'], prefix='AGE_GROUP', drop_first=False)
-    # Rename columns to replace hyphens with underscores for better compatibility
-    age_group_dummies.columns = [col.replace('-', '_') for col in age_group_dummies.columns]
-    final_customer_profile = pd.concat([final_customer_profile, age_group_dummies], axis=1)
-    final_customer_profile = final_customer_profile.drop(columns=['AGE_GROUP'])
+age_group_dummies = pd.get_dummies(final_customer_profile['AGE_GROUP'], prefix='AGE_GROUP', drop_first=False)
+age_group_dummies.columns = [col.replace('-', '_') for col in age_group_dummies.columns]
+final_customer_profile = pd.concat([final_customer_profile, age_group_dummies], axis=1)
+final_customer_profile = final_customer_profile.drop(columns=['AGE_GROUP'])
+
+# One-hot encode GENDER
+gender_dummies = pd.get_dummies(final_customer_profile['GENDER'], prefix='GENDER', drop_first=False)
+final_customer_profile = pd.concat([final_customer_profile, gender_dummies], axis=1)
+final_customer_profile = final_customer_profile.drop(columns=['GENDER'])
 
 final_customer_profile.to_csv("final_customer_profile.csv", index=False)
 
