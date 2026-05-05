@@ -314,3 +314,46 @@ if summary_list:
     # Save using the explicitly mapped directory path
     summary_df.to_csv(summary_path, index=False)
     print(f"\n[Saved] Product summary saved exactly to: \n  -> {summary_path}")
+
+
+
+    # ========================= 8. Population Reconcilliation =========================
+
+# 1. Count how many total products each customer has
+product_cols = [col for col in final_customer_profile.columns if col.startswith('HAS_PROD_')]
+products_per_customer = final_customer_profile[product_cols].sum(axis=1)
+
+# 2. Calculate the splits
+total_customers = len(final_customer_profile)
+no_product_count = (products_per_customer == 0).sum()
+has_product_count = (products_per_customer > 0).sum()
+
+# 3. Print the breakdown BEFORE the summary concept
+print("\n============================================================")
+print(" POPULATION BREAKDOWN")
+print("============================================================")
+print(f"Total Unique Customers in Data : {total_customers}")
+print(f"Customers with NO products     : {no_product_count}")
+print(f"Customers with 1+ products     : {has_product_count}")
+print("-" * 60)
+print(f"Math Check: {no_product_count} + {has_product_count} = {no_product_count + has_product_count}")
+
+# (Assuming summary_df is already created from the previous code)
+print("\n--- Product Summary Table ---")
+print(summary_df[['Product', 'Total_Customers']].to_string(index=False))
+
+# 4. Print the breakdown AFTER the summary concept
+sum_of_summary = summary_df['Total_Customers'].sum()
+
+print("\n============================================================")
+print(" POST-SUMMARY RECONCILIATION")
+print("============================================================")
+print(f"Sum of customers in the Summary Table: {sum_of_summary}")
+print(f"Unique customers with 1+ products    : {has_product_count}")
+print("-" * 60)
+print(f"Difference (Overlap)                 : {sum_of_summary - has_product_count}")
+
+print("\n💡 What this means:")
+print("If the sum of the Summary Table is LARGER than your unique customers with products,")
+print("it means you have cross-sell overlap! Specifically, there are " + str(sum_of_summary - has_product_count) + " instances")
+print("where a customer owns more than one product and is being counted in multiple buckets.")
