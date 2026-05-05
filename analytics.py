@@ -293,10 +293,21 @@ if len(products_to_drop) > 0:
     # Drop these low-volume product columns
     final_customer_profile = final_customer_profile.drop(columns=products_to_drop)
 
+# 8. Final Summary
+final_products = [col for col in final_customer_profile.columns if col.startswith('HAS_PROD_')]
+final_features = [col for col in final_customer_profile.columns if col not in final_products and col not in ['CUSTOMER_ID', 'BRANCH_ID']]
+
+print("\n============================================================")
+print(" FINAL DATASET SUMMARY")
+print("============================================================")
+print(f"Total Customers:         {len(final_customer_profile)}")
+print(f"Total Features Retained: {len(final_features)}")
+print(f"Total Products Retained: {len(final_products)}")
+print("============================================================\n")
+
 # 7. Save the optimized dataset for Machine Learning
 optimized_path = os.path.join(script_dir, "final_customer_profile_optimized.csv")
 final_customer_profile.to_csv(optimized_path, index=False)
-
 print(f"\n[Saved] Optimized ML-ready dataset saved to: \n  -> {optimized_path}")
 
 # import os
