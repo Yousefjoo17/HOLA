@@ -224,20 +224,6 @@ final_customer_profile.to_csv("final_customer_profile.csv", index=False)
 
 
 # I need to make analytcis and see correlation with products to help me understand the full resultant data final_customer_profile 
-
-import pandas as pd
-print("Loading final_customer_profile.csv...")
-final_customer_profile = pd.read_csv("final_customer_profile.csv")
-
-import os
-import matplotlib.pyplot as plt
-import seaborn as sns
-
-# ========================= 7. Product Correlation & Analytics =========================
-print("\n============================================================")
-print(" PHASE 4: Product Analytics & Correlation")
-print("============================================================\n")
-
 # --- PATH CONFIGURATION ---
 # If running as a standard .py script, this finds the script's exact folder:
 try:
@@ -247,94 +233,15 @@ except NameError:
     # (Jupyter doesn't support __file__)
     script_dir = os.getcwd()
 
-# Define explicit paths for your output files
-heatmap_path = os.path.join(script_dir, 'product_feature_correlation_heatmap.png')
-summary_path = os.path.join(script_dir, 'product_profile_summary.csv')
-# --------------------------
+import pandas as pd
+print("Loading final_customer_profile.csv...")
+final_customer_profile = pd.read_csv("final_customer_profile.csv")
 
-# 1. Identify Product Columns vs Feature Columns
-product_cols = [col for col in final_customer_profile.columns if col.startswith('HAS_PROD_')]
-mcc_cols = [col for col in final_customer_profile.columns if col.startswith('MCC_')]
-exclude_cols = ['CUSTOMER_ID', 'BRANCH_ID'] + product_cols + mcc_cols
-feature_cols = [col for col in final_customer_profile.columns if col not in exclude_cols]
 
-# Filter products: only include those with >= 500 customers
-print("Filtering products with >= 500 customers...")
-product_customer_counts = {prod: (final_customer_profile[prod] == 1).sum() for prod in product_cols}
-filtered_products = [prod for prod in product_cols if product_customer_counts[prod] >= 500]
-
-print(f"  Total products: {len(product_cols)}")
-print(f"  Products with >= 500 customers: {len(filtered_products)}")
-print(f"  Products excluded (< 500 customers): {len(product_cols) - len(filtered_products)}\n")
-
-# 2. Calculate Correlation Matrix
-print("Calculating feature correlations...")
-corr_matrix = final_customer_profile[feature_cols + filtered_products].corr()
-prod_corr = corr_matrix.loc[feature_cols, filtered_products]
-
-# 3. Print Top Correlated Features per Product
-print("\n--- Top Driving Features per Product (>= 500 customers) ---")
-for prod in filtered_products:
-    product_name = prod.replace('HAS_PROD_', '')
-    customer_count = product_customer_counts[prod]
-    print(f"\n>> Product: {product_name} ({customer_count} customers)")
-    
-    sorted_corrs = prod_corr[prod].dropna().sort_values(ascending=False)
-    
-    print("  Top Positive Drivers:")
-    print(sorted_corrs.head(3).to_string())
-    print("\n  Top Negative Drivers:")
-    print(sorted_corrs.tail(3).sort_values(ascending=True).to_string())
-
-# 4. Generate & Save a Correlation Heatmap
-plt.figure(figsize=(14, 10))
-sns.heatmap(prod_corr, annot=False, cmap='coolwarm', center=0, 
-            cbar_kws={'label': 'Pearson Correlation'})
-
-plt.title('Correlation: Customer Behaviors & Demographics vs. Product Ownership (Products with ≥500 customers)', fontsize=14)
-plt.ylabel('Customer Features', fontsize=12)
-plt.xlabel('Products', fontsize=12)
-plt.xticks(rotation=45, ha='right')
-plt.tight_layout()
-
-# Save using the explicitly mapped directory path
-plt.savefig(heatmap_path, dpi=300)
-print(f"\n[Saved] Correlation heatmap saved exactly to: \n  -> {heatmap_path}")
-plt.close()
-
-# 5. Product Level Summary (Averages)
-print("\n--- Average Customer Profile per Product (>= 500 customers) ---")
-key_metrics = ['TOTAL_SPEND_AMT', 'AVG_TRXN_AMT', 'TRXN_COUNT', 'DAYS_SINCE_LAST_TRXN', 'FOREIGN_TRXN_COUNT']
-safe_metrics = [m for m in key_metrics if m in final_customer_profile.columns]
-
-summary_list = []
-for prod in filtered_products:
-    subset = final_customer_profile[final_customer_profile[prod] == 1]
-    if len(subset) >= 500:
-        avg_metrics = subset[safe_metrics].mean().to_dict()
-        avg_metrics['Product'] = prod.replace('HAS_PROD_', '')
-        avg_metrics['Total_Customers'] = len(subset)
-        summary_list.append(avg_metrics)
-
-if summary_list:
-    summary_df = pd.DataFrame(summary_list)
-    cols = ['Product', 'Total_Customers'] + safe_metrics
-    summary_df = summary_df[cols]
-    
-    print(summary_df.to_string(index=False))
-    
-    # Save using the explicitly mapped directory path
-    summary_df.to_csv(summary_path, index=False)
-    print(f"\n[Saved] Product summary saved exactly to: \n  -> {summary_path}")
-
-# ========================= 8. Feature Selection (Correlation Filtering) =========================
-print("\n============================================================")
-print(" PHASE 5: Dimensionality Reduction (Dropping Uncorrelated Features)")
-print("============================================================\n")
 
 # 1. Define the threshold for "meaningful" correlation
-# (e.g., 0.05 means we drop features that have less than 5% correlation with EVERY product)
-CORR_THRESHOLD = 0.05 
+# (e.g., 0.1 means we drop features that have less than 10% correlation with EVERY product)
+CORR_THRESHOLD = 0.1
 
 # 2. Isolate feature columns and product columns
 product_cols = [col for col in final_customer_profile.columns if col.startswith('HAS_PROD_')]
@@ -367,7 +274,118 @@ if len(features_to_drop) > 0:
 # 6. Drop the uncorrelated features from the main dataframe
 final_customer_profile = final_customer_profile.drop(columns=features_to_drop)
 
+# Re-evaluate product columns currently in the dataframe
+current_product_cols = [col for col in final_customer_profile.columns if col.startswith('HAS_PROD_')]
+
+# Sum the binary columns to get the total number of holders for each product
+product_counts = final_customer_profile[current_product_cols].sum()
+
+# Identify products with less than 100 holders
+products_to_drop = product_counts[product_counts < 100].index.tolist()
+
+print(f"\n[Filtering Low-Volume Products]")
+print(f" -> Dropping {len(products_to_drop)} products with fewer than 100 holders.")
+
+if len(products_to_drop) > 0:
+    for prod in products_to_drop:
+        print(f"  - {prod} (Holders: {int(product_counts[prod])})")
+        
+    # Drop these low-volume product columns
+    final_customer_profile = final_customer_profile.drop(columns=products_to_drop)
+
 # 7. Save the optimized dataset for Machine Learning
 optimized_path = os.path.join(script_dir, "final_customer_profile_optimized.csv")
 final_customer_profile.to_csv(optimized_path, index=False)
+
 print(f"\n[Saved] Optimized ML-ready dataset saved to: \n  -> {optimized_path}")
+
+# import os
+# import matplotlib.pyplot as plt
+# import seaborn as sns
+
+# # ========================= 7. Product Correlation & Analytics =========================
+# print("\n============================================================")
+# print(" PHASE 4: Product Analytics & Correlation")
+# print("============================================================\n")
+
+
+# # Define explicit paths for your output files
+# heatmap_path = os.path.join(script_dir, 'product_feature_correlation_heatmap.png')
+# summary_path = os.path.join(script_dir, 'product_profile_summary.csv')
+# # --------------------------
+
+# # 1. Identify Product Columns vs Feature Columns
+# product_cols = [col for col in final_customer_profile.columns if col.startswith('HAS_PROD_')]
+# mcc_cols = [col for col in final_customer_profile.columns if col.startswith('MCC_')]
+# exclude_cols = ['CUSTOMER_ID', 'BRANCH_ID'] + product_cols + mcc_cols
+# feature_cols = [col for col in final_customer_profile.columns if col not in exclude_cols]
+
+# # Filter products: only include those with >= 100 customers
+# print("Filtering products with >= 100 customers...")
+# product_customer_counts = {prod: (final_customer_profile[prod] == 1).sum() for prod in product_cols}
+# filtered_products = [prod for prod in product_cols if product_customer_counts[prod] >= 100]
+
+# print(f"  Total products: {len(product_cols)}")
+# print(f"  Products with >= 100 customers: {len(filtered_products)}")
+# print(f"  Products excluded (< 100 customers): {len(product_cols) - len(filtered_products)}\n")
+
+# # 2. Calculate Correlation Matrix
+# print("Calculating feature correlations...")
+# corr_matrix = final_customer_profile[feature_cols + filtered_products].corr()
+# prod_corr = corr_matrix.loc[feature_cols, filtered_products]
+
+# # 3. Print Top Correlated Features per Product
+# print("\n--- Top Driving Features per Product (>= 100 customers) ---")
+# for prod in filtered_products:
+#     product_name = prod.replace('HAS_PROD_', '')
+#     customer_count = product_customer_counts[prod]
+#     print(f"\n>> Product: {product_name} ({customer_count} customers)")
+    
+#     sorted_corrs = prod_corr[prod].dropna().sort_values(ascending=False)
+    
+#     print("  Top Positive Drivers:")
+#     print(sorted_corrs.head(3).to_string())
+#     print("\n  Top Negative Drivers:")
+#     print(sorted_corrs.tail(3).sort_values(ascending=True).to_string())
+
+# # 4. Generate & Save a Correlation Heatmap
+# plt.figure(figsize=(14, 10))
+# sns.heatmap(prod_corr, annot=False, cmap='coolwarm', center=0, 
+#             cbar_kws={'label': 'Pearson Correlation'})
+
+# plt.title('Correlation: Customer Behaviors & Demographics vs. Product Ownership (Products with ≥100 customers)', fontsize=14)
+# plt.ylabel('Customer Features', fontsize=12)
+# plt.xlabel('Products', fontsize=12)
+# plt.xticks(rotation=45, ha='right')
+# plt.tight_layout()
+
+# # Save using the explicitly mapped directory path
+# plt.savefig(heatmap_path, dpi=300)
+# print(f"\n[Saved] Correlation heatmap saved exactly to: \n  -> {heatmap_path}")
+# plt.close()
+
+# # 5. Product Level Summary (Averages)
+# print("\n--- Average Customer Profile per Product (>= 100 customers) ---")
+# key_metrics = ['TOTAL_SPEND_AMT', 'AVG_TRXN_AMT', 'TRXN_COUNT', 'DAYS_SINCE_LAST_TRXN', 'FOREIGN_TRXN_COUNT']
+# safe_metrics = [m for m in key_metrics if m in final_customer_profile.columns]
+
+# summary_list = []
+# for prod in filtered_products:
+#     subset = final_customer_profile[final_customer_profile[prod] == 1]
+#     if len(subset) >= 100:
+#         avg_metrics = subset[safe_metrics].mean().to_dict()
+#         avg_metrics['Product'] = prod.replace('HAS_PROD_', '')
+#         avg_metrics['Total_Customers'] = len(subset)
+#         summary_list.append(avg_metrics)
+
+# if summary_list:
+#     summary_df = pd.DataFrame(summary_list)
+#     cols = ['Product', 'Total_Customers'] + safe_metrics
+#     summary_df = summary_df[cols]
+    
+#     print(summary_df.to_string(index=False))
+    
+#     # Save using the explicitly mapped directory path
+#     summary_df.to_csv(summary_path, index=False)
+#     print(f"\n[Saved] Product summary saved exactly to: \n  -> {summary_path}")
+
