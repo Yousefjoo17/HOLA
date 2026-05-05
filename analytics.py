@@ -206,6 +206,14 @@ final_columns_to_drop = ['AGE', "BRANCH_NAME","PRODUCT_NAME","DOB","RIMNO","DOB_
 existing_cols_to_drop = [col for col in final_columns_to_drop if col in final_customer_profile.columns]
 final_customer_profile = final_customer_profile.drop(columns=existing_cols_to_drop)
 
+# One-hot encode AGE_GROUP
+if 'AGE_GROUP' in final_customer_profile.columns:
+    age_group_dummies = pd.get_dummies(final_customer_profile['AGE_GROUP'], prefix='AGE_GROUP', drop_first=False)
+    # Rename columns to replace hyphens with underscores for better compatibility
+    age_group_dummies.columns = [col.replace('-', '_') for col in age_group_dummies.columns]
+    final_customer_profile = pd.concat([final_customer_profile, age_group_dummies], axis=1)
+    final_customer_profile = final_customer_profile.drop(columns=['AGE_GROUP'])
+
 final_customer_profile.to_csv("final_customer_profile.csv", index=False)
 
 
@@ -228,7 +236,7 @@ df = pd.read_csv("final_customer_profile.csv")
 
 for col in df.columns:
     print(col, df[col].dtype)
-    
+
 # Identify product columns dynamically
 prod_cols = [col for col in df.columns if col.startswith('HAS_PROD_')]
 
